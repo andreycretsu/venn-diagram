@@ -46,38 +46,34 @@ let circleConfig = {
     }
 };
 
-// Get responsive dimensions - FIT TO SCREEN by default
+// Get responsive dimensions - FIT TO SCREEN 100% by default
 function getResponsiveDimensions() {
     const container = document.querySelector('.venn-container');
     if (!container) return getDefaultDimensions();
     
     const containerRect = container.getBoundingClientRect();
-    const availableWidth = containerRect.width - 40; // 20px padding on each side
-    const availableHeight = containerRect.height - 40;
+    const availableWidth = containerRect.width;
+    const availableHeight = containerRect.height;
     
-    // Reserve space for labels OUTSIDE circles (100px on sides, 120px top/bottom)
-    const usableWidth = availableWidth - 200; // 100px each side for labels
-    const usableHeight = availableHeight - 240; // 120px top/bottom for labels
-    
-    // Calculate optimal radius to fit screen with labels outside
+    // Use MAXIMUM possible space - fit circles to 100% screen
     const maxRadius = Math.min(
-        usableWidth / 3.0, // Width for three circles with some overlap
-        usableHeight / 2.5  // Height for two rows of circles
+        (availableWidth - 160) / 2.5, // Fit horizontally with minimal margin
+        (availableHeight - 100) / 2.2  // Fit vertically with minimal margin
     );
     
-    const radius = Math.max(120, Math.min(350, maxRadius)); // Between 120-350px
-    const centerDistance = radius * 1.6; // Slightly closer than perfect for better fit
+    const radius = Math.max(150, maxRadius); // Minimum 150px for readability
+    const centerDistance = radius * 1.4; // Closer for better screen fit
     
-    // Calculate centers with labels safely outside
+    // Center everything in available space
     const svgWidth = availableWidth;
     const svgHeight = availableHeight;
     
     const centerX = svgWidth / 2;
-    const topY = 120 + radius; // 120px from top for labels
-    const bottomY = svgHeight - 120 - radius; // 120px from bottom for labels
+    const centerY = svgHeight / 2;
     
-    const leftX = 100 + radius; // 100px from left for labels
-    const rightX = svgWidth - 100 - radius; // 100px from right for labels
+    // Equilateral triangle positioning - MAXIMIZE screen usage
+    const halfDistance = centerDistance / 2;
+    const triangleHeight = centerDistance * Math.sin(Math.PI / 3);
     
     return {
         radius: radius,
@@ -85,9 +81,9 @@ function getResponsiveDimensions() {
         svgWidth: svgWidth,
         svgHeight: svgHeight,
         centers: {
-            hris: { x: leftX, y: topY },
-            payroll: { x: rightX, y: topY },
-            expense: { x: centerX, y: bottomY }
+            hris: { x: centerX - halfDistance, y: centerY - triangleHeight / 3 },
+            payroll: { x: centerX + halfDistance, y: centerY - triangleHeight / 3 },
+            expense: { x: centerX, y: centerY + (2 * triangleHeight) / 3 }
         }
     };
 }
@@ -434,23 +430,34 @@ function handleDropZoneLeave(e) {
 
 function handleAddCompany(e) {
     e.preventDefault();
+    console.log('Add company form submitted');
     
     const name = document.getElementById('company-name').value.trim();
     const logoUrl = document.getElementById('company-logo').value.trim();
     const isPortfolio = document.getElementById('is-portfolio').checked;
     
-    if (!name) return;
+    console.log('Company data:', { name, logoUrl, isPortfolio });
     
-    // Add new company at center
+    if (!name) {
+        console.log('No name provided');
+        return;
+    }
+    
+    // Add new company at center using responsive positioning
+    const responsive = getResponsiveDimensions();
+    const centerX = responsive.svgWidth / 2;
+    const centerY = responsive.svgHeight / 2;
+    
     const newCompany = {
         name: name,
-        x: 600,
-        y: 500,
+        logo: logoUrl || null,
+        x: centerX,
+        y: centerY,
         category: 'none',
-        portfolio: isPortfolio,
-        logoUrl: logoUrl
+        portfolio: isPortfolio
     };
     
+    console.log('Adding company:', newCompany);
     companies.push(newCompany);
     renderCompanies();
     autoSave();
@@ -461,6 +468,7 @@ function handleAddCompany(e) {
     
     // Show success feedback
     showNotification(`${name} added successfully!`);
+    console.log('Company added, total companies:', companies.length);
 }
 
 function showNotification(message) {
@@ -693,14 +701,14 @@ function updateCirclePositions() {
         const distanceValue = document.getElementById('distance-value');
         
         if (radiusControl) {
-            radiusControl.min = 120;
-            radiusControl.max = 350;
-            radiusControl.value = circleConfig.radius;
+            radiusControl.min = 150;
+            radiusControl.max = 500;
+            radiusControl.value = Math.round(circleConfig.radius);
         }
         if (distanceControl) {
-            distanceControl.min = 150;
-            distanceControl.max = 500;
-            distanceControl.value = circleConfig.centerDistance;
+            distanceControl.min = 200;
+            distanceControl.max = 800;
+            distanceControl.value = Math.round(circleConfig.centerDistance);
         }
         if (radiusValue) radiusValue.textContent = `${circleConfig.radius}px`;
         if (distanceValue) distanceValue.textContent = `${circleConfig.centerDistance}px`;
@@ -740,25 +748,26 @@ function updateCircles() {
         circle.setAttribute('r', circleConfig.radius);
     });
     
-    // Update labels with dynamic positioning - ALWAYS OUTSIDE circles
+    // Update labels - place outside circles in available space
     const labels = svg.querySelectorAll('.category-label');
     if (labels.length >= 3) {
-        // HRIS label - FAR LEFT of left circle
-        labels[0].setAttribute('x', circleConfig.centers.hris.x - circleConfig.radius - 50);
-        labels[0].setAttribute('y', circleConfig.centers.hris.y + 5);
+        // HRIS label - LEFT OUTSIDE
+        labels[0].setAttribute('x', Math.max(50, circleConfig.centers.hris.x - circleConfig.radius - 20));
+        labels[0].setAttribute('y', circleConfig.centers.hris.y - 20);
         labels[0].setAttribute('text-anchor', 'middle');
         
-        // Payroll & Benefits label - FAR RIGHT of right circle  
-        labels[1].setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 50);
-        labels[1].setAttribute('y', circleConfig.centers.payroll.y);
+        // Payroll & Benefits label - RIGHT OUTSIDE  
+        const responsive = getResponsiveDimensions();
+        labels[1].setAttribute('x', Math.min(responsive.svgWidth - 50, circleConfig.centers.payroll.x + circleConfig.radius + 20));
+        labels[1].setAttribute('y', circleConfig.centers.payroll.y - 20);
         labels[1].setAttribute('text-anchor', 'middle');
         if (labels[1].querySelector('tspan')) {
-            labels[1].querySelector('tspan').setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 50);
+            labels[1].querySelector('tspan').setAttribute('x', Math.min(responsive.svgWidth - 50, circleConfig.centers.payroll.x + circleConfig.radius + 20));
         }
         
-        // Expense Management & Finance label - FAR BOTTOM of bottom circle
+        // Expense Management & Finance label - BOTTOM OUTSIDE
         labels[2].setAttribute('x', circleConfig.centers.expense.x);
-        labels[2].setAttribute('y', circleConfig.centers.expense.y + circleConfig.radius + 60);
+        labels[2].setAttribute('y', Math.min(responsive.svgHeight - 20, circleConfig.centers.expense.y + circleConfig.radius + 30));
         labels[2].setAttribute('text-anchor', 'middle');
     }
 } 
