@@ -46,32 +46,38 @@ let circleConfig = {
     }
 };
 
-// Get responsive dimensions
+// Get responsive dimensions - FIT TO SCREEN by default
 function getResponsiveDimensions() {
     const container = document.querySelector('.venn-container');
+    if (!container) return getDefaultDimensions();
+    
     const containerRect = container.getBoundingClientRect();
     const availableWidth = containerRect.width - 40; // 20px padding on each side
     const availableHeight = containerRect.height - 40;
     
-    // Calculate optimal radius to fit screen
+    // Reserve space for labels OUTSIDE circles (100px on sides, 120px top/bottom)
+    const usableWidth = availableWidth - 200; // 100px each side for labels
+    const usableHeight = availableHeight - 240; // 120px top/bottom for labels
+    
+    // Calculate optimal radius to fit screen with labels outside
     const maxRadius = Math.min(
-        availableWidth / 3.5, // Width divided by 3.5 to fit three circles with overlap
-        availableHeight / 3.2  // Height divided by 3.2 to fit vertically
+        usableWidth / 3.0, // Width for three circles with some overlap
+        usableHeight / 2.5  // Height for two rows of circles
     );
     
-    const radius = Math.max(150, Math.min(400, maxRadius)); // Between 150-400px
-    const centerDistance = radius * 1.732; // Perfect geometric distance
+    const radius = Math.max(120, Math.min(350, maxRadius)); // Between 120-350px
+    const centerDistance = radius * 1.6; // Slightly closer than perfect for better fit
     
-    // Calculate centers to fit the available space
+    // Calculate centers with labels safely outside
     const svgWidth = availableWidth;
     const svgHeight = availableHeight;
     
     const centerX = svgWidth / 2;
-    const topY = radius + 50; // 50px from top for labels
-    const bottomY = svgHeight - radius - 50; // 50px from bottom for labels
+    const topY = 120 + radius; // 120px from top for labels
+    const bottomY = svgHeight - 120 - radius; // 120px from bottom for labels
     
-    const leftX = centerX - centerDistance / 2;
-    const rightX = centerX + centerDistance / 2;
+    const leftX = 100 + radius; // 100px from left for labels
+    const rightX = svgWidth - 100 - radius; // 100px from right for labels
     
     return {
         radius: radius,
@@ -82,6 +88,21 @@ function getResponsiveDimensions() {
             hris: { x: leftX, y: topY },
             payroll: { x: rightX, y: topY },
             expense: { x: centerX, y: bottomY }
+        }
+    };
+}
+
+// Fallback dimensions if container not ready
+function getDefaultDimensions() {
+    return {
+        radius: 200,
+        centerDistance: 320,
+        svgWidth: 800,
+        svgHeight: 600,
+        centers: {
+            hris: { x: 200, y: 200 },
+            payroll: { x: 600, y: 200 },
+            expense: { x: 400, y: 450 }
         }
     };
 }
@@ -105,8 +126,8 @@ function initializeFirebase() {
 
 // Initialize the dashboard
 document.addEventListener('DOMContentLoaded', function() {
-    renderCompanies();
-    setupEventListeners();
+    console.log('DOM Content Loaded');
+    initializeLayout();
 });
 
 function renderCompanies() {
@@ -190,64 +211,79 @@ function getCompanyInitials(name) {
 }
 
 function setupEventListeners() {
-    // Modal functionality
-    const modal = document.getElementById('add-company-modal');
-    const addBtn = document.getElementById('add-company-btn');
-    const closeBtn = document.querySelector('.close');
-    const form = document.getElementById('add-company-form');
-    
-    addBtn.addEventListener('click', () => modal.style.display = 'block');
-    closeBtn.addEventListener('click', () => modal.style.display = 'none');
-    window.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
-    });
-    
-    form.addEventListener('submit', handleAddCompany);
-    
-    // Control functionality
-    const radiusControl = document.getElementById('radius-control');
-    const distanceControl = document.getElementById('distance-control');
-    const perfectAlignmentBtn = document.getElementById('perfect-alignment-btn');
-    const radiusValue = document.getElementById('radius-value');
-    const distanceValue = document.getElementById('distance-value');
-    
-    radiusControl.addEventListener('input', (e) => {
-        circleConfig.radius = parseInt(e.target.value);
-        radiusValue.textContent = `${circleConfig.radius}px`;
-        updateCircles();
-        autoSave();
-    });
-    
-    distanceControl.addEventListener('input', (e) => {
-        circleConfig.centerDistance = parseInt(e.target.value);
-        distanceValue.textContent = `${circleConfig.centerDistance}px`;
-        updateCirclePositions();
-        updateCircles();
-        autoSave();
-    });
-    
-    perfectAlignmentBtn.addEventListener('click', () => {
-        // Apply the perfect geometric formula: d = r × √3 ≈ r × 1.732
-        const perfectDistance = Math.round(circleConfig.radius * 1.732);
-        circleConfig.centerDistance = perfectDistance;
-        distanceControl.value = perfectDistance;
-        distanceValue.textContent = `${perfectDistance}px`;
-        updateCirclePositions();
-        updateCircles();
-        autoSave();
-        showNotification('Perfect geometric alignment applied!');
-    });
-    
-    // Global mouse events for dragging
-    document.addEventListener('mousemove', handleDrag);
-    document.addEventListener('mouseup', endDrag);
-    
-    // Drop zone event listeners
-    const dropZones = document.querySelectorAll('.drop-zone');
-    dropZones.forEach(zone => {
-        zone.addEventListener('mouseenter', handleDropZoneEnter);
-        zone.addEventListener('mouseleave', handleDropZoneLeave);
-    });
+    // Wait for elements to be ready
+    setTimeout(() => {
+        // Modal functionality
+        const modal = document.getElementById('add-company-modal');
+        const addBtn = document.getElementById('add-company-btn');
+        const closeBtn = document.querySelector('.close');
+        const form = document.getElementById('add-company-form');
+        
+        if (addBtn) addBtn.addEventListener('click', () => modal.style.display = 'block');
+        if (closeBtn) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        });
+        
+        if (form) form.addEventListener('submit', handleAddCompany);
+        
+        // Control functionality - ENSURE CONTROLS WORK
+        const radiusControl = document.getElementById('radius-control');
+        const distanceControl = document.getElementById('distance-control');
+        const perfectAlignmentBtn = document.getElementById('perfect-alignment-btn');
+        const radiusValue = document.getElementById('radius-value');
+        const distanceValue = document.getElementById('distance-value');
+        
+        console.log('Setting up controls:', { radiusControl, distanceControl, perfectAlignmentBtn });
+        
+        if (radiusControl) {
+            radiusControl.addEventListener('input', (e) => {
+                console.log('Radius changed:', e.target.value);
+                circleConfig.radius = parseInt(e.target.value);
+                if (radiusValue) radiusValue.textContent = `${circleConfig.radius}px`;
+                updateCircles();
+                autoSave();
+            });
+        }
+        
+        if (distanceControl) {
+            distanceControl.addEventListener('input', (e) => {
+                console.log('Distance changed:', e.target.value);
+                circleConfig.centerDistance = parseInt(e.target.value);
+                if (distanceValue) distanceValue.textContent = `${circleConfig.centerDistance}px`;
+                updateCirclePositions();
+                updateCircles();
+                autoSave();
+            });
+        }
+        
+        if (perfectAlignmentBtn) {
+            perfectAlignmentBtn.addEventListener('click', (e) => {
+                console.log('Perfect alignment clicked');
+                e.preventDefault();
+                // Apply the perfect geometric formula: d = r × √3 ≈ r × 1.732
+                const perfectDistance = Math.round(circleConfig.radius * 1.732);
+                circleConfig.centerDistance = perfectDistance;
+                if (distanceControl) distanceControl.value = perfectDistance;
+                if (distanceValue) distanceValue.textContent = `${perfectDistance}px`;
+                updateCirclePositions();
+                updateCircles();
+                autoSave();
+                showNotification('Perfect geometric alignment applied!');
+            });
+        }
+        
+        // Global mouse events for dragging
+        document.addEventListener('mousemove', handleDrag);
+        document.addEventListener('mouseup', endDrag);
+        
+        // Drop zone event listeners
+        const dropZones = document.querySelectorAll('.drop-zone');
+        dropZones.forEach(zone => {
+            zone.addEventListener('mouseenter', handleDropZoneEnter);
+            zone.addEventListener('mouseleave', handleDropZoneLeave);
+        });
+    }, 100);
 }
 
 function startDrag(e) {
@@ -611,11 +647,27 @@ window.addEventListener('resize', () => {
     initializeLayout();
 });
 
-// Initialize or reinitialize the entire layout
+// Initialize or reinitialize the entire layout - FIT TO SCREEN by default
 function initializeLayout() {
+    console.log('Initializing layout...');
+    
+    // Force responsive update
     updateCirclePositions();
     updateCircles();
+    
+    // Create company cards by default
+    if (companies.length === 0) {
+        companies = [...initialCompanies];
+    }
+    
     renderCompanies();
+    
+    // Set up controls after layout is ready
+    setTimeout(() => {
+        setupEventListeners();
+    }, 50);
+    
+    console.log('Layout initialized with', companies.length, 'companies');
 }
 
 // Update circle positions and SVG dimensions
@@ -629,17 +681,30 @@ function updateCirclePositions() {
     
     // Update SVG viewBox to fit content
     const svg = document.querySelector('.venn-diagram');
-    svg.setAttribute('viewBox', `0 0 ${responsive.svgWidth} ${responsive.svgHeight}`);
-    
-    // Update controls to reflect new values
-    const radiusControl = document.getElementById('radius-control');
-    const distanceControl = document.getElementById('distance-control');
-    if (radiusControl && distanceControl) {
-        radiusControl.value = circleConfig.radius;
-        distanceControl.value = circleConfig.centerDistance;
-        document.getElementById('radius-value').textContent = `${circleConfig.radius}px`;
-        document.getElementById('distance-value').textContent = `${circleConfig.centerDistance}px`;
+    if (svg) {
+        svg.setAttribute('viewBox', `0 0 ${responsive.svgWidth} ${responsive.svgHeight}`);
     }
+    
+    // Update controls to reflect new values - FORCE UPDATE
+    setTimeout(() => {
+        const radiusControl = document.getElementById('radius-control');
+        const distanceControl = document.getElementById('distance-control');
+        const radiusValue = document.getElementById('radius-value');
+        const distanceValue = document.getElementById('distance-value');
+        
+        if (radiusControl) {
+            radiusControl.min = 120;
+            radiusControl.max = 350;
+            radiusControl.value = circleConfig.radius;
+        }
+        if (distanceControl) {
+            distanceControl.min = 150;
+            distanceControl.max = 500;
+            distanceControl.value = circleConfig.centerDistance;
+        }
+        if (radiusValue) radiusValue.textContent = `${circleConfig.radius}px`;
+        if (distanceValue) distanceValue.textContent = `${circleConfig.centerDistance}px`;
+    }, 10);
 }
 
 // Update circle elements in the SVG
@@ -675,25 +740,25 @@ function updateCircles() {
         circle.setAttribute('r', circleConfig.radius);
     });
     
-    // Update labels with dynamic positioning - always outside circles
+    // Update labels with dynamic positioning - ALWAYS OUTSIDE circles
     const labels = svg.querySelectorAll('.category-label');
     if (labels.length >= 3) {
-        // HRIS label - left edge of left circle
-        labels[0].setAttribute('x', circleConfig.centers.hris.x - circleConfig.radius - 10);
-        labels[0].setAttribute('y', circleConfig.centers.hris.y);
-        labels[0].setAttribute('text-anchor', 'end');
+        // HRIS label - FAR LEFT of left circle
+        labels[0].setAttribute('x', circleConfig.centers.hris.x - circleConfig.radius - 50);
+        labels[0].setAttribute('y', circleConfig.centers.hris.y + 5);
+        labels[0].setAttribute('text-anchor', 'middle');
         
-        // Payroll & Benefits label - right edge of right circle  
-        labels[1].setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 10);
-        labels[1].setAttribute('y', circleConfig.centers.payroll.y - 10);
-        labels[1].setAttribute('text-anchor', 'start');
+        // Payroll & Benefits label - FAR RIGHT of right circle  
+        labels[1].setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 50);
+        labels[1].setAttribute('y', circleConfig.centers.payroll.y);
+        labels[1].setAttribute('text-anchor', 'middle');
         if (labels[1].querySelector('tspan')) {
-            labels[1].querySelector('tspan').setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 10);
+            labels[1].querySelector('tspan').setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 50);
         }
         
-        // Expense Management & Finance label - bottom edge of bottom circle
+        // Expense Management & Finance label - FAR BOTTOM of bottom circle
         labels[2].setAttribute('x', circleConfig.centers.expense.x);
-        labels[2].setAttribute('y', circleConfig.centers.expense.y + circleConfig.radius + 30);
+        labels[2].setAttribute('y', circleConfig.centers.expense.y + circleConfig.radius + 60);
         labels[2].setAttribute('text-anchor', 'middle');
     }
 } 
