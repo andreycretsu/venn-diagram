@@ -52,28 +52,29 @@ function getResponsiveDimensions() {
     if (!container) return getDefaultDimensions();
     
     const containerRect = container.getBoundingClientRect();
-    const availableWidth = containerRect.width;
-    const availableHeight = containerRect.height;
+    // Account for 20px padding on all sides
+    const availableWidth = containerRect.width - 40;
+    const availableHeight = containerRect.height - 40;
     
-    // Use MAXIMUM possible space - fit circles to 100% screen
+    // Calculate maximum radius to fit three circles with perfect overlap
     const maxRadius = Math.min(
-        (availableWidth - 160) / 2.5, // Fit horizontally with minimal margin
-        (availableHeight - 100) / 2.2  // Fit vertically with minimal margin
+        availableWidth / 3.2, // Fit horizontally with some overlap
+        availableHeight / 2.8  // Fit vertically 
     );
     
-    const radius = Math.max(150, maxRadius); // Minimum 150px for readability
-    const centerDistance = radius * 1.4; // Closer for better screen fit
+    const radius = Math.max(120, maxRadius); // Minimum 120px for mobile
+    const centerDistance = radius * 1.5; // Good overlap ratio
     
-    // Center everything in available space
+    // Center everything in available space (accounting for padding)
     const svgWidth = availableWidth;
     const svgHeight = availableHeight;
     
     const centerX = svgWidth / 2;
     const centerY = svgHeight / 2;
     
-    // Equilateral triangle positioning - MAXIMIZE screen usage
+    // Equilateral triangle positioning - FILL the screen
     const halfDistance = centerDistance / 2;
-    const triangleHeight = centerDistance * Math.sin(Math.PI / 3);
+    const triangleHeight = centerDistance * Math.sin(Math.PI / 3); // ~0.866
     
     return {
         radius: radius,
@@ -209,16 +210,34 @@ function getCompanyInitials(name) {
 function setupEventListeners() {
     // Wait for elements to be ready
     setTimeout(() => {
-        // Modal functionality
-        const modal = document.getElementById('add-company-modal');
+        // Floating buttons
         const addBtn = document.getElementById('add-company-btn');
-        const closeBtn = document.querySelector('.close');
+        const editBtn = document.getElementById('edit-circles-btn');
+        const screenshotBtn = document.getElementById('screenshot-btn');
+        
+        // Modals
+        const addModal = document.getElementById('add-company-modal');
+        const editModal = document.getElementById('edit-circles-modal');
         const form = document.getElementById('add-company-form');
         
-        if (addBtn) addBtn.addEventListener('click', () => modal.style.display = 'block');
-        if (closeBtn) closeBtn.addEventListener('click', () => modal.style.display = 'none');
+        // Button event listeners
+        if (addBtn) addBtn.addEventListener('click', () => addModal.style.display = 'block');
+        if (editBtn) editBtn.addEventListener('click', () => editModal.style.display = 'block');
+        if (screenshotBtn) screenshotBtn.addEventListener('click', takeScreenshot);
+        
+        // Close button event listeners
+        document.querySelectorAll('.close').forEach(closeBtn => {
+            closeBtn.addEventListener('click', (e) => {
+                const modalType = e.target.getAttribute('data-modal');
+                if (modalType === 'add-company') addModal.style.display = 'none';
+                if (modalType === 'edit-circles') editModal.style.display = 'none';
+            });
+        });
+        
+        // Click outside to close modals
         window.addEventListener('click', (e) => {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === addModal) addModal.style.display = 'none';
+            if (e.target === editModal) editModal.style.display = 'none';
         });
         
         if (form) form.addEventListener('submit', handleAddCompany);
@@ -469,6 +488,119 @@ function handleAddCompany(e) {
     // Show success feedback
     showNotification(`${name} added successfully!`);
     console.log('Company added, total companies:', companies.length);
+}
+
+// Screenshot functionality
+function takeScreenshot() {
+    console.log('Taking screenshot...');
+    
+    // Create a canvas element
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Get the venn container
+    const container = document.querySelector('.venn-container');
+    const rect = container.getBoundingClientRect();
+    
+    // Set canvas size
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    
+    // Fill background
+    ctx.fillStyle = '#f8f9fa';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Try to use html2canvas library if available, otherwise use simple method
+    if (typeof html2canvas !== 'undefined') {
+        html2canvas(container, {
+            backgroundColor: '#f8f9fa',
+            scale: 2,
+            useCORS: true
+        }).then(canvas => {
+            downloadCanvasAsImage(canvas, 'venn-diagram.png');
+        });
+    } else {
+        // Fallback: capture SVG
+        captureSVGScreenshot();
+    }
+}
+
+function captureSVGScreenshot() {
+    const svg = document.querySelector('.venn-diagram');
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svg);
+    
+    // Create canvas
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    // Set canvas size
+    canvas.width = 1200;
+    canvas.height = 800;
+    
+    // Fill background
+    ctx.fillStyle = '#f8f9fa';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Convert SVG to data URL
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    
+    img.onload = function() {
+        ctx.drawImage(img, 0, 0);
+        
+        // Add company logos
+        const companies = document.querySelectorAll('.company-logo');
+        let loadedLogos = 0;
+        const totalLogos = companies.length;
+        
+        if (totalLogos === 0) {
+            downloadCanvasAsImage(canvas, 'venn-diagram.png');
+            return;
+        }
+        
+        companies.forEach(logo => {
+            const rect = logo.getBoundingClientRect();
+            const containerRect = document.querySelector('.venn-container').getBoundingClientRect();
+            
+            // Calculate relative position
+            const x = ((rect.left - containerRect.left) / containerRect.width) * canvas.width;
+            const y = ((rect.top - containerRect.top) / containerRect.height) * canvas.height;
+            
+            // Draw company circle
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(x + 20, y + 20, 20, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw company text
+            ctx.fillStyle = '#333';
+            ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(logo.textContent, x + 20, y + 25);
+            
+            loadedLogos++;
+            if (loadedLogos === totalLogos) {
+                downloadCanvasAsImage(canvas, 'venn-diagram.png');
+            }
+        });
+        
+        URL.revokeObjectURL(url);
+    };
+    
+    img.src = url;
+}
+
+function downloadCanvasAsImage(canvas, filename) {
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showNotification('Screenshot saved!');
 }
 
 function showNotification(message) {

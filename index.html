@@ -8,24 +8,6 @@
 </head>
 <body>
     <div class="dashboard">
-        <header class="dashboard-header">
-            <h1>Company Categories Dashboard</h1>
-            <div class="controls">
-                <div class="control-group">
-                    <label for="radius-control">Circle Radius</label>
-                    <input type="range" id="radius-control" min="150" max="500" value="250" step="10">
-                    <span id="radius-value">250px</span>
-                </div>
-                <div class="control-group">
-                    <label for="distance-control">Center Distance</label>
-                    <input type="range" id="distance-control" min="200" max="800" value="350" step="10">
-                    <span id="distance-value">350px</span>
-                </div>
-                <button id="perfect-alignment-btn" class="perfect-btn">Perfect Alignment</button>
-            </div>
-            <button id="add-company-btn" class="add-btn">+ Add Company</button>
-        </header>
-        
         <div class="venn-container">
             <svg class="venn-diagram" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
                 <!-- Background gradient -->
@@ -94,10 +76,32 @@
             </div>
         </div>
         
+        <!-- Floating Action Buttons -->
+        <div class="floating-buttons">
+            <button id="add-company-btn" class="floating-btn" title="Add Company">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+            <button id="edit-circles-btn" class="floating-btn" title="Edit Circles">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            </button>
+            <button id="screenshot-btn" class="floating-btn" title="Take Screenshot">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+            </button>
+        </div>
+        
         <!-- Add company modal -->
         <div id="add-company-modal" class="modal">
             <div class="modal-content">
-                <span class="close">&times;</span>
+                <span class="close" data-modal="add-company">&times;</span>
                 <h2>Add New Company</h2>
                 <form id="add-company-form">
                     <input type="text" id="company-name" placeholder="Company Name" required>
@@ -107,6 +111,27 @@
                     </label>
                     <button type="submit">Add Company</button>
                 </form>
+            </div>
+        </div>
+        
+        <!-- Edit circles modal -->
+        <div id="edit-circles-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" data-modal="edit-circles">&times;</span>
+                <h2>Edit Circles</h2>
+                <div class="controls-modal">
+                    <div class="control-group">
+                        <label for="radius-control">Circle Radius</label>
+                        <input type="range" id="radius-control" min="150" max="500" value="250" step="10">
+                        <span id="radius-value">250px</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="distance-control">Center Distance</label>
+                        <input type="range" id="distance-control" min="200" max="800" value="350" step="10">
+                        <span id="distance-value">350px</span>
+                    </div>
+                    <button id="perfect-alignment-btn" class="perfect-btn">Perfect Alignment</button>
+                </div>
             </div>
         </div>
         
