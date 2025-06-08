@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en" class="theme-executive">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Card Canvas - Executive Edition</title>
+    <meta name="description" content="Professional business card visualization with Executive theme - Create, manage, and export beautiful business card layouts">
+    <meta name="author" content="Andrey Cretsu">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous">
+    
+    <!-- Styles -->
+  <script type="module" crossorigin src="/assets/main-DmKq_XL1.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/main-Kavff0JX.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Main Canvas Container -->
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="canvas"></canvas>
+            
+            <!-- Canvas Loading Overlay -->
+            <div class="canvas-loading" id="canvasLoading" style="display: none;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <!-- Floating Action Buttons -->
+        <div class="floating-controls">
+            <button class="floating-button executive" onclick="openAddCardModal()" title="Add Business Card" aria-label="Add Business Card">
+                <i class="fas fa-plus"></i>
+                <span class="control-tooltip">Add Card</span>
+            </button>
+            <button class="floating-button" onclick="openSettingsModal()" title="Settings" aria-label="Open Settings">
+                <i class="fas fa-cog"></i>
+                <span class="control-tooltip">Settings</span>
+            </button>
+            <button class="floating-button success" onclick="exportCanvas()" title="Export Canvas" aria-label="Export Canvas">
+                <i class="fas fa-download"></i>
+                <span class="control-tooltip">Export</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Card Modal -->
+    <div class="modal" id="addCardModal" role="dialog" aria-labelledby="addCardTitle" aria-hidden="true">
+        <div class="modal-overlay" onclick="closeModal('addCardModal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="addCardTitle">
+                    <i class="fas fa-plus-circle"></i>
+                    Add Business Card
+                </h2>
+                <button class="modal-close" onclick="closeModal('addCardModal')" aria-label="Close modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <form class="add-card-form">
+                    <div class="form-group">
+                        <label for="companyName" class="form-label">
+                            <i class="fas fa-building"></i>
+                            Company Name
+                        </label>
+                        <input 
+                            type="text" 
+                            id="companyName" 
+                            class="form-input"
+                            placeholder="Enter company name" 
+                            autocomplete="organization"
+                            required
+                        >
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cardCategory" class="form-label">
+                            <i class="fas fa-tag"></i>
+                            Category
+                        </label>
+                        <select id="cardCategory" class="form-select">
+                            <option value="technology">Technology</option>
+                            <option value="finance">Finance</option>
+                            <option value="healthcare">Healthcare</option>
+                            <option value="education">Education</option>
+                            <option value="retail">Retail</option>
+                            <option value="manufacturing">Manufacturing</option>
+                            <option value="services">Services</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="logoUrl" class="form-label">
+                            <i class="fas fa-image"></i>
+                            Logo URL (Optional)
+                        </label>
+                        <input 
+                            type="url" 
+                            id="logoUrl" 
+                            class="form-input"
+                            placeholder="Enter image URL or leave blank for auto-generated logo"
+                        >
+                    </div>
+                    
+                    <div class="status-display">
+                        <div class="status-item">
+                            <span class="status-label">
+                                <i class="fas fa-crosshairs"></i>
+                                Position
+                            </span>
+                            <span class="status-value" id="selectedPosition">Click on canvas</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-eye"></i>
+                            Preview
+                        </label>
+                        <div class="card-preview" id="cardPreview">
+                            <div class="preview-card">Preview will appear here</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="modal-button secondary" onclick="closeModal('addCardModal')">
+                    <i class="fas fa-times"></i>
+                    Cancel
+                </button>
+                <button class="modal-button primary" onclick="addBusinessCard()">
+                    <i class="fas fa-plus"></i>
+                    Add Card
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal" role="dialog" aria-labelledby="settingsTitle" aria-hidden="true">
+        <div class="modal-overlay" onclick="closeModal('settingsModal')"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="settingsTitle">
+                    <i class="fas fa-cog"></i>
+                    Canvas Settings
+                </h2>
+                <button class="modal-close" onclick="closeModal('settingsModal')" aria-label="Close modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3 class="settings-section-title">
+                        <i class="fas fa-circle"></i>
+                        Circle Controls
+                    </h3>
+                    
+                    <div class="settings-grid">
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Circle Radius</span>
+                                <span class="slider-value" id="radiusValue">180px</span>
+                            </div>
+                            <input type="range" id="circleRadius" class="slider" min="50" max="400" value="180" aria-label="Circle Radius">
+                        </div>
+                        
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Circle Distance</span>
+                                <span class="slider-value" id="spacingValue">310px</span>
+                            </div>
+                            <input type="range" id="circleSpacing" class="slider" min="100" max="800" value="310" aria-label="Circle Distance">
+                        </div>
+                        
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Circle Opacity</span>
+                                <span class="slider-value" id="opacityValue">30%</span>
+                            </div>
+                            <input type="range" id="circleOpacity" class="slider" min="0" max="100" value="30" aria-label="Circle Opacity">
+                        </div>
+                        
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Card Size</span>
+                                <span class="slider-value" id="cardSizeValue">80px</span>
+                            </div>
+                            <input type="range" id="cardSize" class="slider" min="40" max="150" value="80" aria-label="Card Size">
+                        </div>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button class="modal-button secondary" onclick="toggleCircles()">
+                            <i class="fas fa-eye"></i>
+                            Toggle Circles
+                        </button>
+                        <button class="modal-button primary" onclick="setOptimalSpacing()">
+                            <i class="fas fa-magic"></i>
+                            Perfect Alignment
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3 class="settings-section-title">
+                        <i class="fas fa-database"></i>
+                        Card Management
+                    </h3>
+                    
+                    <div class="button-group">
+                        <button class="modal-button primary" onclick="populateCanvas()">
+                            <i class="fas fa-magic"></i>
+                            Populate with Companies
+                        </button>
+                        <button class="modal-button secondary" onclick="clearAndPopulate()">
+                            <i class="fas fa-sync-alt"></i>
+                            Reset & Populate
+                        </button>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button class="modal-button secondary" onclick="selectAllCards()">
+                            <i class="fas fa-check-square"></i>
+                            Select All
+                        </button>
+                        <button class="modal-button secondary" onclick="deselectAllCards()">
+                            <i class="fas fa-square"></i>
+                            Deselect All
+                        </button>
+                        <button class="modal-button secondary" onclick="clearAllCards()">
+                            <i class="fas fa-trash-alt"></i>
+                            Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu" role="menu" aria-hidden="true">
+        <div class="context-menu-item" onclick="editCard()" role="menuitem">
+            <i class="context-menu-icon fas fa-edit"></i>
+            <span class="context-menu-text">Edit Card</span>
+        </div>
+        <div class="context-menu-item" onclick="duplicateCard()" role="menuitem">
+            <i class="context-menu-icon fas fa-copy"></i>
+            <span class="context-menu-text">Duplicate</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item danger" onclick="deleteCardFromContext()" role="menuitem">
+            <i class="context-menu-icon fas fa-trash"></i>
+            <span class="context-menu-text">Delete</span>
+        </div>
+    </div>
+
+    <!-- Toast Container for Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Application Script -->
+    
+    <!-- Structured Data for SEO -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Business Card Canvas - Executive Edition",
+        "description": "Professional business card visualization with Executive theme",
+        "author": {
+            "@type": "Person",
+            "name": "Andrey Cretsu"
+        },
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Any"
+    }
+    </script>
+</body>
+</html> 

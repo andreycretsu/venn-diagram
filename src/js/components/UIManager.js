@@ -464,10 +464,36 @@ export class UIManager {
         
         // Update UI with loaded values
         this.updateSliderValues();
+      } else {
+        // First visit - populate with some example companies
+        this.populateWithExampleCompanies();
       }
     } catch (error) {
       console.error('Failed to load from localStorage:', error);
     }
+  }
+
+  populateWithExampleCompanies() {
+    // Add a few example companies on first visit
+    const exampleCompanies = [
+      { company: 'Workday', category: 'technology', x: 200, y: 150 },
+      { company: 'Gusto', category: 'technology', x: 400, y: 150 },
+      { company: 'Expensify', category: 'finance', x: 300, y: 300 },
+      { company: 'ADP', category: 'technology', x: 250, y: 200 },
+      { company: 'Concur', category: 'finance', x: 350, y: 250 }
+    ];
+
+    exampleCompanies.forEach(cardData => {
+      this.cardService.createCard(cardData);
+    });
+
+    this.canvas.setCards(this.cardService.getAllCards());
+    this.saveToStorage();
+    
+    // Show a welcome message
+    setTimeout(() => {
+      this.showNotification('Welcome! These are example companies. Click "Populate with Companies" for more or add your own!', 'info');
+    }, 1000);
   }
 
   updateSliderValues() {
