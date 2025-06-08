@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Company Categories Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="dashboard-header">
+            <h1>Company Categories Dashboard</h1>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="radius-control">Circle Radius</label>
+                    <input type="range" id="radius-control" min="150" max="450" value="360" step="10">
+                    <span id="radius-value">360px</span>
+                </div>
+                <div class="control-group">
+                    <label for="distance-control">Center Distance</label>
+                    <input type="range" id="distance-control" min="200" max="600" value="312" step="5">
+                    <span id="distance-value">312px</span>
+                </div>
+                <button id="perfect-alignment-btn" class="perfect-btn">Perfect Alignment</button>
+            </div>
+            <button id="add-company-btn" class="add-btn">+ Add Company</button>
+        </header>
+        
+        <div class="venn-container">
+            <svg class="venn-diagram" viewBox="0 0 1200 1000" preserveAspectRatio="xMidYMid meet">
+                <!-- Background gradient -->
+                <defs>
+                    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#4ECDC4;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#8FBC8F;stop-opacity:1" />
+                    </linearGradient>
+                    
+                    <!-- Drop shadow filter -->
+                    <filter id="dropshadow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feDropShadow dx="2" dy="4" stdDeviation="3" flood-opacity="0.3"/>
+                    </filter>
+                </defs>
+                
+
+                
+                <!-- Category labels -->
+                <text x="360" y="70" class="category-label" text-anchor="middle">HRIS</text>
+                <text x="840" y="70" class="category-label" text-anchor="middle">Payroll &<tspan x="840" dy="20">Benefits</tspan></text>
+                <text x="600" y="980" class="category-label" text-anchor="middle">Expense Management & Finance</text>
+                
+                <!-- Venn diagram circles -->
+                <circle id="hris-circle" cx="360" cy="300" r="360" 
+                        fill="none" 
+                        stroke="#333" 
+                        stroke-width="3" 
+                        class="venn-circle"/>
+                        
+                <circle id="payroll-circle" cx="840" cy="300" r="360" 
+                        fill="none" 
+                        stroke="#333" 
+                        stroke-width="3" 
+                        class="venn-circle"/>
+                        
+                <circle id="expense-circle" cx="600" cy="600" r="360" 
+                        fill="none" 
+                        stroke="#333" 
+                        stroke-width="3" 
+                        class="venn-circle"/>
+                        
+                <!-- Drop zones (invisible) -->
+                <circle id="hris-zone" cx="360" cy="300" r="360" 
+                        fill="transparent" 
+                        class="drop-zone" 
+                        data-category="hris"/>
+                        
+                <circle id="payroll-zone" cx="840" cy="300" r="360" 
+                        fill="transparent" 
+                        class="drop-zone" 
+                        data-category="payroll"/>
+                        
+                <circle id="expense-zone" cx="600" cy="600" r="360" 
+                        fill="transparent" 
+                        class="drop-zone" 
+                        data-category="expense"/>
+                        
+                <!-- Portfolio company legend -->
+                <rect x="70" y="750" width="12" height="12" fill="none" stroke="#ff6b6b" stroke-width="2"/>
+                <text x="90" y="761" class="legend-text">= Index portfolio<tspan x="90" dy="15">company</tspan></text>
+            </svg>
+            
+            <!-- Company logos container -->
+            <div id="companies-container" class="companies-container">
+                <!-- Companies will be populated by JavaScript -->
+            </div>
+        </div>
+        
+        <!-- Add company modal -->
+        <div id="add-company-modal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Add New Company</h2>
+                <form id="add-company-form">
+                    <input type="text" id="company-name" placeholder="Company Name" required>
+                    <input type="url" id="company-logo" placeholder="Logo URL (optional)">
+                    <label>
+                        <input type="checkbox" id="is-portfolio"> Index Portfolio Company
+                    </label>
+                    <button type="submit">Add Company</button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Status indicator -->
+        <div id="status-indicator" class="status-indicator">
+            <span id="status-text">Connected</span>
+        </div>
+    </div>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 
