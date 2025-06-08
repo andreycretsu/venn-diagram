@@ -1,0 +1,47 @@
+/* Canvas Component Styles */
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--canvas-background);
+  cursor: crosshair;
+  touch-action: none; /* Prevent default touch behaviors */
+}
+
+/* Canvas states */
+#canvas.dragging {
+  cursor: grabbing;
+}
+
+#canvas.selecting {
+  cursor: crosshair;
+}
+
+#canvas.panning {
+  cursor: grab;
+}
+
+/* Selection overlay */
+.selection-overlay {
+  position: absolute;
+  border: 2px dashed var(--color-primary);
+  background: rgba(102, 126, 234, 0.1);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Grid overlay */
+.grid-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image: 
+    linear-gradient(to right, var(--color-text-muted) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-text-muted) 1px, transparent 1px);
+  background-size: 20px 20px;
+} 

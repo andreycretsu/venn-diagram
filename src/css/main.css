@@ -1,0 +1,209 @@
+/* Main CSS Entry Point */
+
+/* 1. Base Styles */
+@import './base/reset.css';
+@import './base/variables.css';
+
+/* 2. Component Styles */
+@import './components/layout.css';
+@import './components/canvas.css';
+@import './components/ui-controls.css';
+@import './components/modals.css';
+@import './components/notifications.css';
+@import './components/context-menu.css';
+
+/* 3. Theme Specific */
+@import './themes/executive.css';
+
+/* Global Application Styles */
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-primary);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Main App Container */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Canvas Container */
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas-background);
+}
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  background: var(--canvas-background);
+}
+
+/* Utility Classes */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  clip: rect(1px, 1px, 1px, 1px) !important;
+  padding: 0 !important;
+  border: 0 !important;
+  height: 1px !important;
+  width: 1px !important;
+  overflow: hidden !important;
+}
+
+/* Focus Management */
+.focus-trap {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: var(--z-modal);
+}
+
+/* Loading States */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error States */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: var(--space-xl);
+  text-align: center;
+  background: var(--color-background);
+}
+
+.error-boundary h1 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--color-error);
+  margin-bottom: var(--space-lg);
+}
+
+.error-boundary p {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xl);
+  max-width: 600px;
+}
+
+/* Performance Optimizations */
+.gpu-accelerated {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Print Styles */
+@media print {
+  .floating-controls,
+  .modal,
+  .notification {
+    display: none !important;
+  }
+  
+  body {
+    overflow: visible;
+  }
+  
+  .canvas-container {
+    overflow: visible;
+    height: auto;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .floating-button {
+    border: 2px solid var(--color-text-primary);
+  }
+  
+  .modal {
+    border: 2px solid var(--color-text-primary);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .floating-controls {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  
+  .floating-button {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .modal {
+    margin: var(--space-md);
+    max-width: calc(100vw - 2rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .floating-controls {
+    right: var(--space-sm);
+    bottom: var(--space-sm);
+  }
+  
+  .modal {
+    margin: var(--space-sm);
+    max-width: calc(100vw - 1rem);
+  }
+} 
