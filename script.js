@@ -35,16 +35,56 @@ let companies = [...initialCompanies];
 let draggedElement = null;
 let dragOffset = { x: 0, y: 0 };
 
-// Circle configuration
+// Circle configuration - will be dynamically calculated based on screen size
 let circleConfig = {
-    radius: 360,
-    centerDistance: 312, // Initial distance (should be radius × 1.732 for perfect alignment)
+    radius: 250,
+    centerDistance: 250,
     centers: {
-        hris: { x: 360, y: 300 },
-        payroll: { x: 840, y: 300 },
-        expense: { x: 600, y: 600 }
+        hris: { x: 300, y: 250 },
+        payroll: { x: 600, y: 250 },
+        expense: { x: 450, y: 450 }
     }
 };
+
+// Get responsive dimensions
+function getResponsiveDimensions() {
+    const container = document.querySelector('.venn-container');
+    const containerRect = container.getBoundingClientRect();
+    const availableWidth = containerRect.width - 40; // 20px padding on each side
+    const availableHeight = containerRect.height - 40;
+    
+    // Calculate optimal radius to fit screen
+    const maxRadius = Math.min(
+        availableWidth / 3.5, // Width divided by 3.5 to fit three circles with overlap
+        availableHeight / 3.2  // Height divided by 3.2 to fit vertically
+    );
+    
+    const radius = Math.max(150, Math.min(400, maxRadius)); // Between 150-400px
+    const centerDistance = radius * 1.732; // Perfect geometric distance
+    
+    // Calculate centers to fit the available space
+    const svgWidth = availableWidth;
+    const svgHeight = availableHeight;
+    
+    const centerX = svgWidth / 2;
+    const topY = radius + 50; // 50px from top for labels
+    const bottomY = svgHeight - radius - 50; // 50px from bottom for labels
+    
+    const leftX = centerX - centerDistance / 2;
+    const rightX = centerX + centerDistance / 2;
+    
+    return {
+        radius: radius,
+        centerDistance: centerDistance,
+        svgWidth: svgWidth,
+        svgHeight: svgHeight,
+        centers: {
+            hris: { x: leftX, y: topY },
+            payroll: { x: rightX, y: topY },
+            expense: { x: centerX, y: bottomY }
+        }
+    };
+}
 
 // Firebase will be initialized from firebase-config.js if available
 let db = null;
@@ -74,9 +114,43 @@ function renderCompanies() {
     container.innerHTML = '';
     
     companies.forEach((company, index) => {
-        const logoElement = createCompanyLogo(company, index);
+        // Ensure company positions are within the new responsive layout
+        const adjusted = adjustCompanyPosition(company);
+        const logoElement = createCompanyLogo(adjusted, index);
         container.appendChild(logoElement);
     });
+}
+
+// Adjust company positions to fit within the responsive layout
+function adjustCompanyPosition(company) {
+    // Get current responsive dimensions
+    const responsive = getResponsiveDimensions();
+    
+    // Scale positions proportionally if they're outside the new bounds
+    let adjustedX = company.x;
+    let adjustedY = company.y;
+    
+    // If positions are way off, relocate them to appropriate areas
+    if (company.x > responsive.svgWidth || company.y > responsive.svgHeight) {
+        const center = responsive.centers[company.category];
+        if (center) {
+            // Place near the appropriate circle center with some randomness
+            const angle = Math.random() * 2 * Math.PI;
+            const distance = Math.random() * (responsive.radius * 0.6);
+            adjustedX = center.x + Math.cos(angle) * distance;
+            adjustedY = center.y + Math.sin(angle) * distance;
+        } else {
+            // Default to center of SVG
+            adjustedX = responsive.svgWidth / 2;
+            adjustedY = responsive.svgHeight / 2;
+        }
+    }
+    
+    return {
+        ...company,
+        x: adjustedX,
+        y: adjustedY
+    };
 }
 
 function createCompanyLogo(company, index) {
@@ -239,9 +313,12 @@ function checkDropZones(clientX, clientY) {
     const relativeX = clientX - svgRect.left;
     const relativeY = clientY - svgRect.top;
     
+    // Get current responsive dimensions
+    const responsive = getResponsiveDimensions();
+    
     // Convert to SVG coordinates
-    const svgX = (relativeX / svgRect.width) * 1200;
-    const svgY = (relativeY / svgRect.height) * 1000;
+    const svgX = (relativeX / svgRect.width) * responsive.svgWidth;
+    const svgY = (relativeY / svgRect.height) * responsive.svgHeight;
     
     // Clear all highlights first
     document.querySelectorAll('.drop-zone').forEach(zone => {
@@ -269,9 +346,12 @@ function updateCompanyCategory(element) {
     const centerX = rect.left + rect.width / 2 - svgRect.left;
     const centerY = rect.top + rect.height / 2 - svgRect.top;
     
+    // Get current responsive dimensions
+    const responsive = getResponsiveDimensions();
+    
     // Convert to SVG coordinates
-    const svgX = (centerX / svgRect.width) * 1200;
-    const svgY = (centerY / svgRect.height) * 1000;
+    const svgX = (centerX / svgRect.width) * responsive.svgWidth;
+    const svgY = (centerY / svgRect.height) * responsive.svgHeight;
     
     const index = parseInt(element.getAttribute('data-index'));
     
@@ -515,6 +595,9 @@ let lastUpdateTimestamp = 0;
 
 // Load saved data on startup
 window.addEventListener('load', () => {
+    // Initialize responsive layout immediately
+    initializeLayout();
+    
     // Small delay to allow firebase-config.js to load
     setTimeout(() => {
         initializeFirebase();
@@ -523,29 +606,40 @@ window.addEventListener('load', () => {
     }, 100);
 });
 
-// Update circle positions based on center distance
+// Handle window resize
+window.addEventListener('resize', () => {
+    initializeLayout();
+});
+
+// Initialize or reinitialize the entire layout
+function initializeLayout() {
+    updateCirclePositions();
+    updateCircles();
+    renderCompanies();
+}
+
+// Update circle positions and SVG dimensions
 function updateCirclePositions() {
-    const baseX = 600; // Center of canvas
-    const baseY = 500;
+    const responsive = getResponsiveDimensions();
     
-    // Calculate positions for equilateral triangle
-    const halfDistance = circleConfig.centerDistance / 2;
-    const height = circleConfig.centerDistance * Math.sin(Math.PI / 3); // Height of equilateral triangle
+    // Update configuration with responsive values
+    circleConfig.radius = responsive.radius;
+    circleConfig.centerDistance = responsive.centerDistance;
+    circleConfig.centers = responsive.centers;
     
-    circleConfig.centers = {
-        hris: { 
-            x: baseX - halfDistance, 
-            y: baseY - height / 3 
-        },
-        payroll: { 
-            x: baseX + halfDistance, 
-            y: baseY - height / 3 
-        },
-        expense: { 
-            x: baseX, 
-            y: baseY + (2 * height) / 3 
-        }
-    };
+    // Update SVG viewBox to fit content
+    const svg = document.querySelector('.venn-diagram');
+    svg.setAttribute('viewBox', `0 0 ${responsive.svgWidth} ${responsive.svgHeight}`);
+    
+    // Update controls to reflect new values
+    const radiusControl = document.getElementById('radius-control');
+    const distanceControl = document.getElementById('distance-control');
+    if (radiusControl && distanceControl) {
+        radiusControl.value = circleConfig.radius;
+        distanceControl.value = circleConfig.centerDistance;
+        document.getElementById('radius-value').textContent = `${circleConfig.radius}px`;
+        document.getElementById('distance-value').textContent = `${circleConfig.centerDistance}px`;
+    }
 }
 
 // Update circle elements in the SVG
@@ -581,18 +675,25 @@ function updateCircles() {
         circle.setAttribute('r', circleConfig.radius);
     });
     
-    // Update labels
-    const hrisLabel = svg.querySelector('text');
-    const payrollLabel = svg.querySelectorAll('text')[1];
-    const expenseLabel = svg.querySelectorAll('text')[2];
-    
-    hrisLabel.setAttribute('x', circleConfig.centers.hris.x);
-    hrisLabel.setAttribute('y', circleConfig.centers.hris.y - circleConfig.radius - 20);
-    
-    payrollLabel.setAttribute('x', circleConfig.centers.payroll.x);
-    payrollLabel.setAttribute('y', circleConfig.centers.payroll.y - circleConfig.radius - 20);
-    payrollLabel.querySelector('tspan').setAttribute('x', circleConfig.centers.payroll.x);
-    
-    expenseLabel.setAttribute('x', circleConfig.centers.expense.x);
-    expenseLabel.setAttribute('y', circleConfig.centers.expense.y + circleConfig.radius + 40);
+    // Update labels with dynamic positioning - always outside circles
+    const labels = svg.querySelectorAll('.category-label');
+    if (labels.length >= 3) {
+        // HRIS label - left edge of left circle
+        labels[0].setAttribute('x', circleConfig.centers.hris.x - circleConfig.radius - 10);
+        labels[0].setAttribute('y', circleConfig.centers.hris.y);
+        labels[0].setAttribute('text-anchor', 'end');
+        
+        // Payroll & Benefits label - right edge of right circle  
+        labels[1].setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 10);
+        labels[1].setAttribute('y', circleConfig.centers.payroll.y - 10);
+        labels[1].setAttribute('text-anchor', 'start');
+        if (labels[1].querySelector('tspan')) {
+            labels[1].querySelector('tspan').setAttribute('x', circleConfig.centers.payroll.x + circleConfig.radius + 10);
+        }
+        
+        // Expense Management & Finance label - bottom edge of bottom circle
+        labels[2].setAttribute('x', circleConfig.centers.expense.x);
+        labels[2].setAttribute('y', circleConfig.centers.expense.y + circleConfig.radius + 30);
+        labels[2].setAttribute('text-anchor', 'middle');
+    }
 } 
