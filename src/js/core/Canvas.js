@@ -311,7 +311,7 @@ export class Canvas {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
     // Draw background
-    this.ctx.fillStyle = '#0f172a';
+    this.ctx.fillStyle = '#ffffff';
     this.ctx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
     
     // Draw circles if enabled
@@ -329,7 +329,40 @@ export class Canvas {
   }
 
   drawCircles() {
-    // Implement circle drawing logic
+    const { width, height } = this.canvas;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) / 4;
+    const offset = radius * 0.6;
+
+    // Circle positions for Venn diagram
+    const circles = [
+      { x: centerX - offset, y: centerY - offset/2, label: 'HRIS', color: 'rgba(59, 130, 246, 0.1)' },
+      { x: centerX + offset, y: centerY - offset/2, label: 'Payroll', color: 'rgba(16, 185, 129, 0.1)' },
+      { x: centerX, y: centerY + offset, label: 'Expense', color: 'rgba(239, 68, 68, 0.1)' }
+    ];
+
+    // Draw circles
+    circles.forEach(circle => {
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.3;
+      this.ctx.fillStyle = circle.color;
+      this.ctx.strokeStyle = circle.color.replace('0.1', '0.6');
+      this.ctx.lineWidth = 2;
+      
+      this.ctx.beginPath();
+      this.ctx.arc(circle.x, circle.y, radius, 0, 2 * Math.PI);
+      this.ctx.fill();
+      this.ctx.stroke();
+      this.ctx.restore();
+
+      // Draw labels
+      this.ctx.fillStyle = '#374151';
+      this.ctx.font = 'bold 16px Inter, sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(circle.label, circle.x, circle.y - radius - 30);
+    });
   }
 
   drawSelectionIndicators() {
@@ -387,7 +420,7 @@ export class Canvas {
     exportCanvas.height = this.canvas.clientHeight * scale;
     
     exportCtx.scale(scale, scale);
-    exportCtx.fillStyle = '#0f172a';
+    exportCtx.fillStyle = '#ffffff';
     exportCtx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
     
     const originalCtx = this.ctx;
