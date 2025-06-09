@@ -7,8 +7,7 @@
     <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
     <style>
         :root {
             --color-background: #ffffff;
@@ -196,7 +195,110 @@
 
         .floating-button.controls { background: #8b5cf6; }
 
-        .collaboration-status {
+        .autosave-status {
+            position: fixed;
+            top: var(--space-lg);
+            left: var(--space-lg);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--shadow-md);
+            z-index: 1000;
+            font-size: 14px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.disconnected {
+            background: #ef4444;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .file-upload-area {
+            border: 2px dashed var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--color-surface);
+        }
+
+        .file-upload-area:hover {
+            border-color: var(--color-primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .file-upload-area.drag-over {
+            border-color: var(--color-primary);
+            background: rgba(59, 130, 246, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-content i {
+            font-size: 24px;
+            color: var(--color-primary);
+            margin-bottom: 8px;
+        }
+
+        .upload-content p {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+
+        .upload-hint {
+            color: #64748b;
+            font-size: 12px !important;
+        }
+
+        .logo-preview {
+            position: relative;
+            max-width: 120px;
+            margin: 0 auto;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 8px;
+            background: white;
+        }
+
+        .logo-preview img {
+            width: 100%;
+            height: auto;
+            max-height: 60px;
+            object-fit: contain;
+        }
+
+        .remove-logo {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ef4444;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .autosave-status {
             position: fixed;
             top: var(--space-lg);
             right: var(--space-lg);
@@ -216,10 +318,6 @@
             height: 8px;
             border-radius: 50%;
             background: #10b981;
-        }
-
-        .status-indicator.disconnected {
-            background: #ef4444;
         }
 
         .control-group {
@@ -317,10 +415,10 @@
             </div>
         </div>
 
-        <!-- Collaboration Status -->
-        <div class="collaboration-status">
+        <!-- Auto-save Status -->
+        <div class="autosave-status">
             <div class="status-indicator" id="statusIndicator"></div>
-            <span id="statusText">Connecting...</span>
+            <span id="statusText">Auto-save Active</span>
         </div>
 
         <div class="floating-controls">
@@ -353,8 +451,19 @@
             </div>
             
             <div class="form-group">
-                <label class="form-label">Logo URL (SVG or PNG)</label>
-                <input type="url" id="companyLogo" class="form-input" placeholder="https://example.com/logo.svg">
+                <label class="form-label">Logo Upload</label>
+                <div class="file-upload-area" id="logoUploadArea">
+                    <div class="upload-content">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Drag & drop SVG/PNG files or SVG code here</p>
+                        <p class="upload-hint">or click to browse</p>
+                    </div>
+                    <input type="file" id="logoFileInput" accept=".svg,.png,image/svg+xml,image/png" style="display: none;">
+                    <div class="logo-preview" id="logoPreview" style="display: none;">
+                        <img id="logoPreviewImg" alt="Logo preview">
+                        <button type="button" class="remove-logo" onclick="removeLogo()">&times;</button>
+                    </div>
+                </div>
             </div>
             
             <div class="form-group">
@@ -376,16 +485,18 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBJ8Q4_demo_key_for_collaboration",
-            authDomain: "venn-canvas-demo.firebaseapp.com",
-            databaseURL: "https://venn-canvas-demo-default-rtdb.firebaseio.com",
-            projectId: "venn-canvas-demo"
+        // REAL Supabase setup - configured with your project
+        const supabaseConfig = {
+            url: 'https://djoboiwyethvkswrhlsp.supabase.co',
+            key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqb2JvaXd5ZXRodmtzd3JobHNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0NjYzMDYsImV4cCI6MjA2NTA0MjMwNn0.69O6lLpFYkh7Y9fIMCeAq81b-TVC_uN_XRn34SVWCYI'
         };
 
-        // Single consolidated script with collaboration and autosave
+        // Global Supabase client
+        let supabaseClient = null;
+
+        // Business Card Canvas with REAL Supabase
         class BusinessCardCanvas {
             constructor() {
                 this.canvas = document.getElementById('canvas');
@@ -397,100 +508,193 @@
                 this.isDragging = false;
                 this.dragStartPos = null;
                 this.hoveredCard = null;
-                this.loadedLogos = new Map(); // Cache for loaded images
+                this.loadedLogos = new Map();
                 
-                // Circle controls - new defaults
                 this.circleRadius = 200;
                 this.centerDistance = 200;
                 this.cardSize = 80;
                 
-                // Collaboration
-                this.sessionId = this.generateSessionId();
-                this.userId = this.generateUserId();
-                this.database = null;
+                // Real collaboration setup
+                this.supabase = null;
+                this.subscription = null;
                 this.isConnected = false;
+                this.isUpdating = false;
                 
                 this.init();
             }
 
             init() {
-                this.initFirebase();
-                this.loadFromStorage();
+                this.initSupabase();
                 this.resizeCanvas();
                 this.setupEventListeners();
-                this.setupAutosave();
                 window.addEventListener('resize', () => this.resizeCanvas());
-                
-                // Load examples only if no saved data
-                if (this.cards.length === 0) {
-                    this.loadExampleCompanies();
-                }
+                this.render();
             }
 
-            generateSessionId() {
-                return Math.random().toString(36).substr(2, 9);
-            }
-
-            generateUserId() {
-                return 'user_' + Math.random().toString(36).substr(2, 9);
-            }
-
-            async initFirebase() {
+            async initSupabase() {
                 try {
-                    if (typeof firebase !== 'undefined') {
-                        firebase.initializeApp(firebaseConfig);
-                        this.database = firebase.database();
-                        this.setupCollaboration();
-                        this.updateStatus('connected', 'Collaborative');
-                    } else {
-                        this.updateStatus('disconnected', 'Local Only');
+                    // Test Supabase connection
+                    console.log('🔄 Testing Supabase connection...');
+                    supabaseClient = supabase.createClient(supabaseConfig.url, supabaseConfig.key);
+                    
+                    // Test the connection with a simple query
+                    const { data, error } = await supabaseClient
+                        .from('canvas_data')
+                        .select('id')
+                        .limit(1);
+                    
+                    if (error) {
+                        console.error('❌ Supabase connection test failed:', error);
+                        throw error;
                     }
+                    
+                    console.log('✅ Supabase connection successful!');
+                    this.supabase = supabaseClient;
+                    this.isConnected = true;
+                    
+                    // Load initial data
+                    await this.loadFromSupabase();
+                    
+                    // Set up real-time collaboration
+                    this.setupRealTimeSubscription();
+                    this.updateStatus('connected', 'Multi-Device Collaboration Active 🌐');
+                    
                 } catch (error) {
-                    console.log('Firebase not available, using local mode');
-                    this.updateStatus('disconnected', 'Local Only');
+                    console.error('❌ Supabase setup failed:', error.message);
+                    this.updateStatus('disconnected', 'Local Mode - No Collaboration');
+                    
+                    // Fallback to localStorage only
+                    this.loadFromStorage();
+                    if (this.cards.length === 0) {
+                        this.loadExampleCompanies();
+                    }
                 }
             }
 
             updateStatus(status, text) {
-                const indicator = document.getElementById('statusIndicator');
                 const statusText = document.getElementById('statusText');
+                const statusIndicator = document.getElementById('statusIndicator');
                 
-                indicator.className = `status-indicator ${status === 'disconnected' ? 'disconnected' : ''}`;
                 statusText.textContent = text;
                 this.isConnected = status === 'connected';
-            }
-
-            setupCollaboration() {
-                if (!this.database) return;
-
-                const sessionRef = this.database.ref(`sessions/${this.sessionId}`);
                 
-                // Listen for changes from other users
-                sessionRef.on('value', (snapshot) => {
-                    const data = snapshot.val();
-                    if (data && data.lastUpdatedBy !== this.userId) {
-                        this.loadDataFromSnapshot(data);
-                    }
-                });
-
-                // Set user presence
-                const userRef = sessionRef.child(`users/${this.userId}`);
-                userRef.set({
-                    online: true,
-                    lastSeen: firebase.database.ServerValue.TIMESTAMP
-                });
-
-                // Clean up on disconnect
-                userRef.onDisconnect().set({
-                    online: false,
-                    lastSeen: firebase.database.ServerValue.TIMESTAMP
-                });
+                if (status === 'connected') {
+                    statusText.style.color = '#10b981';
+                    statusIndicator.className = 'status-indicator';
+                    statusIndicator.style.background = '#10b981';
+                } else {
+                    statusText.style.color = '#ef4444';
+                    statusIndicator.className = 'status-indicator disconnected';
+                    statusIndicator.style.background = '#ef4444';
+                }
             }
 
-            loadDataFromSnapshot(data) {
-                if (data.cards) {
-                    this.cards = data.cards;
+            async loadFromSupabase() {
+                if (!this.supabase) return;
+
+                try {
+                    console.log('📥 Loading data from Supabase...');
+                    
+                    const { data, error } = await this.supabase
+                        .from('canvas_data')
+                        .select('*')
+                        .eq('id', 'shared-canvas')
+                        .single();
+
+                    if (error) {
+                        if (error.code === 'PGRST116') {
+                            // No data found, create initial record
+                            console.log('📝 No data found, creating initial record...');
+                            await this.createInitialRecord();
+                            return;
+                        }
+                        throw error;
+                    }
+
+                    if (data) {
+                        this.cards = data.cards || [];
+                        if (data.settings) {
+                            this.circleRadius = data.settings.circleRadius || 200;
+                            this.centerDistance = data.settings.centerDistance || 200;
+                            this.cardSize = data.settings.cardSize || 80;
+                            this.showCircles = data.settings.showCircles !== false;
+                        }
+                        console.log('✅ Loaded from Supabase:', this.cards.length, 'cards');
+                    }
+
+                    // Load examples if no cards exist
+                    if (this.cards.length === 0) {
+                        this.loadExampleCompanies();
+                        // Save the examples to Supabase
+                        await this.saveToSupabase();
+                    }
+                } catch (error) {
+                    console.error('❌ Error loading from Supabase:', error.message);
+                    this.loadExampleCompanies();
                 }
+            }
+
+            async createInitialRecord() {
+                try {
+                    const initialData = {
+                        id: 'shared-canvas',
+                        cards: [],
+                        settings: {
+                            circleRadius: 200,
+                            centerDistance: 200,
+                            cardSize: 80,
+                            showCircles: true
+                        },
+                        updated_at: new Date().toISOString()
+                    };
+
+                    const { error } = await this.supabase
+                        .from('canvas_data')
+                        .insert(initialData);
+
+                    if (error) throw error;
+                    
+                    console.log('✅ Created initial Supabase record');
+                    this.loadExampleCompanies();
+                    await this.saveToSupabase();
+                } catch (error) {
+                    console.error('❌ Failed to create initial record:', error.message);
+                    this.loadExampleCompanies();
+                }
+            }
+
+            setupRealTimeSubscription() {
+                if (!this.supabase) return;
+
+                console.log('🔔 Setting up real-time subscription...');
+                
+                // Subscribe to real-time changes
+                this.subscription = this.supabase
+                    .channel('canvas-realtime')
+                    .on('postgres_changes', 
+                        { 
+                            event: 'UPDATE', 
+                            schema: 'public', 
+                            table: 'canvas_data',
+                            filter: 'id=eq.shared-canvas'
+                        },
+                        (payload) => {
+                            if (!this.isUpdating) {
+                                console.log('📡 Received real-time update from another device!');
+                                this.handleRealtimeUpdate(payload.new);
+                            }
+                        }
+                    )
+                    .subscribe((status) => {
+                        console.log('📡 Real-time subscription status:', status);
+                        if (status === 'SUBSCRIBED') {
+                            console.log('✅ Real-time collaboration is ACTIVE!');
+                        }
+                    });
+            }
+
+            handleRealtimeUpdate(data) {
+                this.cards = data.cards || [];
                 if (data.settings) {
                     this.circleRadius = data.settings.circleRadius || 200;
                     this.centerDistance = data.settings.centerDistance || 200;
@@ -498,32 +702,77 @@
                     this.showCircles = data.settings.showCircles !== false;
                     this.updateControlsUI();
                 }
+                
                 this.render();
+                this.showNotification('Updated from another device! 🌐', 'info');
             }
 
-            saveToCollaboration() {
-                if (!this.database || !this.isConnected) return;
-
-                const sessionRef = this.database.ref(`sessions/${this.sessionId}`);
-                sessionRef.update({
-                    cards: this.cards,
-                    settings: {
-                        circleRadius: this.circleRadius,
-                        centerDistance: this.centerDistance,
-                        cardSize: this.cardSize,
-                        showCircles: this.showCircles
-                    },
-                    lastUpdatedBy: this.userId,
-                    lastUpdated: firebase.database.ServerValue.TIMESTAMP
-                });
-            }
-
-            setupAutosave() {
-                // Auto-save every 2 seconds
-                setInterval(() => {
+            async saveToSupabase() {
+                if (!this.supabase || !this.isConnected) {
+                    console.log('💾 No Supabase connection - saving locally only');
                     this.saveToStorage();
-                    this.saveToCollaboration();
-                }, 2000);
+                    return;
+                }
+
+                this.isUpdating = true; // Prevent infinite loops
+                
+                try {
+                    const saveData = {
+                        id: 'shared-canvas',
+                        cards: this.cards,
+                        settings: {
+                            circleRadius: this.circleRadius,
+                            centerDistance: this.centerDistance,
+                            cardSize: this.cardSize,
+                            showCircles: this.showCircles
+                        },
+                        updated_at: new Date().toISOString()
+                    };
+
+                    console.log('💾 Saving to Supabase...', { cards: this.cards.length });
+
+                    const { error } = await this.supabase
+                        .from('canvas_data')
+                        .upsert(saveData, { onConflict: 'id' });
+
+                    if (error) {
+                        console.error('❌ Supabase save error:', error);
+                        throw error;
+                    }
+
+                    console.log('✅ Successfully saved to Supabase - all devices will sync!');
+                    this.updateStatus('connected', 'Synced ✅');
+                    
+                    setTimeout(() => {
+                        this.updateStatus('connected', 'Multi-Device Collaboration Active 🌐');
+                    }, 1500);
+
+                } catch (error) {
+                    console.error('❌ Save to Supabase failed:', error.message);
+                    this.updateStatus('disconnected', 'Sync Failed - Local Only');
+                    this.saveToStorage();
+                } finally {
+                    this.isUpdating = false;
+                }
+            }
+
+            // Fallback localStorage methods (for when Firebase isn't configured)
+            loadFromStorage() {
+                try {
+                    const saved = localStorage.getItem('venn-canvas-local');
+                    if (saved) {
+                        const data = JSON.parse(saved);
+                        this.cards = data.cards || [];
+                        if (data.settings) {
+                            this.circleRadius = data.settings.circleRadius || 200;
+                            this.centerDistance = data.settings.centerDistance || 200;
+                            this.cardSize = data.settings.cardSize || 80;
+                            this.showCircles = data.settings.showCircles !== false;
+                        }
+                    }
+                } catch (error) {
+                    console.log('Error loading local data:', error);
+                }
             }
 
             saveToStorage() {
@@ -534,29 +783,9 @@
                         centerDistance: this.centerDistance,
                         cardSize: this.cardSize,
                         showCircles: this.showCircles
-                    },
-                    sessionId: this.sessionId
-                };
-                localStorage.setItem('venn-canvas-data', JSON.stringify(data));
-            }
-
-            loadFromStorage() {
-                try {
-                    const saved = localStorage.getItem('venn-canvas-data');
-                    if (saved) {
-                        const data = JSON.parse(saved);
-                        this.cards = data.cards || [];
-                        if (data.settings) {
-                            this.circleRadius = data.settings.circleRadius || 200;
-                            this.centerDistance = data.settings.centerDistance || 200;
-                            this.cardSize = data.settings.cardSize || 80;
-                            this.showCircles = data.settings.showCircles !== false;
-                        }
-                        this.sessionId = data.sessionId || this.generateSessionId();
                     }
-                } catch (error) {
-                    console.log('Error loading saved data:', error);
-                }
+                };
+                localStorage.setItem('venn-canvas-local', JSON.stringify(data));
             }
 
             updateControlsUI() {
@@ -617,6 +846,7 @@
                             
                             this.dragStartPos = mousePos;
                             this.render();
+                            this.saveToSupabase(); // Save when cards are moved
                         }
                     } else {
                         // Check hover state
@@ -724,6 +954,9 @@
                 if (card.logo) {
                     this.loadLogo(card.logo);
                 }
+                
+                // Save to Supabase for real-time collaboration
+                this.saveToSupabase();
                 
                 return card;
             }
@@ -990,18 +1223,162 @@
 
         // Global functions for onclick handlers
         let app;
+        let uploadedLogoData = null; // Store uploaded logo data
 
         function openAddCardModal() {
             document.getElementById('addCardModal').classList.add('show');
+            setupFileUpload();
         }
 
         function closeModal(modalId) {
             document.getElementById(modalId).classList.remove('show');
+            if (modalId === 'addCardModal') {
+                resetFileUpload();
+            }
+        }
+
+        function setupFileUpload() {
+            const uploadArea = document.getElementById('logoUploadArea');
+            const fileInput = document.getElementById('logoFileInput');
+            const uploadContent = uploadArea.querySelector('.upload-content');
+            
+            // Click to upload
+            uploadArea.addEventListener('click', () => {
+                if (!uploadArea.querySelector('.logo-preview').style.display || 
+                    uploadArea.querySelector('.logo-preview').style.display === 'none') {
+                    fileInput.click();
+                }
+            });
+            
+            // File input change
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Drag and drop
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
+            uploadArea.addEventListener('drop', handleDrop);
+            
+            // Paste SVG code
+            uploadArea.addEventListener('paste', handlePaste);
+            uploadArea.setAttribute('tabindex', '0'); // Make it focusable for paste
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove('drag-over');
+            
+            const files = Array.from(e.dataTransfer.files);
+            const text = e.dataTransfer.getData('text');
+            
+            if (files.length > 0) {
+                const file = files.find(f => f.type.includes('svg') || f.type.includes('png'));
+                if (file) {
+                    processFile(file);
+                }
+            } else if (text && (text.includes('<svg') || text.startsWith('data:image'))) {
+                processSVGCode(text);
+            }
+        }
+
+        function handlePaste(e) {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            if (text && text.includes('<svg')) {
+                processSVGCode(text);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+
+        function processFile(file) {
+            if (!file.type.includes('svg') && !file.type.includes('png')) {
+                app.showNotification('Please upload SVG or PNG files only', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const result = e.target.result;
+                if (file.type.includes('svg')) {
+                    // For SVG files, we can use the data URL directly
+                    showLogoPreview(result);
+                    uploadedLogoData = result;
+                } else {
+                    // For PNG files, create data URL
+                    showLogoPreview(result);
+                    uploadedLogoData = result;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function processSVGCode(svgCode) {
+            try {
+                // Clean and validate SVG
+                const cleanSVG = svgCode.trim();
+                if (!cleanSVG.includes('<svg')) {
+                    throw new Error('Invalid SVG');
+                }
+                
+                // Create data URL from SVG code
+                const dataUrl = 'data:image/svg+xml;base64,' + btoa(cleanSVG);
+                showLogoPreview(dataUrl);
+                uploadedLogoData = dataUrl;
+                
+                app.showNotification('SVG code processed successfully!', 'success');
+            } catch (error) {
+                app.showNotification('Invalid SVG code', 'error');
+            }
+        }
+
+        function showLogoPreview(dataUrl) {
+            const uploadArea = document.getElementById('logoUploadArea');
+            const uploadContent = uploadArea.querySelector('.upload-content');
+            const preview = document.getElementById('logoPreview');
+            const previewImg = document.getElementById('logoPreviewImg');
+            
+            uploadContent.style.display = 'none';
+            preview.style.display = 'block';
+            previewImg.src = dataUrl;
+        }
+
+        function removeLogo() {
+            resetFileUpload();
+            uploadedLogoData = null;
+        }
+
+        function resetFileUpload() {
+            const uploadArea = document.getElementById('logoUploadArea');
+            const uploadContent = uploadArea.querySelector('.upload-content');
+            const preview = document.getElementById('logoPreview');
+            const fileInput = document.getElementById('logoFileInput');
+            
+            uploadContent.style.display = 'block';
+            preview.style.display = 'none';
+            fileInput.value = '';
+            uploadedLogoData = null;
         }
 
         function addBusinessCard() {
             const companyName = document.getElementById('companyName').value.trim();
-            const companyLogo = document.getElementById('companyLogo').value.trim();
             const category = document.getElementById('cardCategory').value;
 
             if (!companyName) {
@@ -1015,7 +1392,7 @@
 
             app.createCard({
                 company: companyName,
-                logo: companyLogo,
+                logo: uploadedLogoData, // Use uploaded logo data
                 category,
                 x: app.clickPosition.x,
                 y: app.clickPosition.y
@@ -1027,7 +1404,7 @@
             
             // Clear form
             document.getElementById('companyName').value = '';
-            document.getElementById('companyLogo').value = '';
+            resetFileUpload();
         }
 
         function populateCanvas() {
@@ -1066,30 +1443,56 @@
                 app.circleRadius = parseInt(e.target.value);
                 radiusValue.textContent = e.target.value;
                 app.render();
+                app.saveToSupabase(); // Save setting changes
             });
             
             distanceSlider.addEventListener('input', (e) => {
                 app.centerDistance = parseInt(e.target.value);
                 distanceValue.textContent = e.target.value;
                 app.render();
+                app.saveToSupabase(); // Save setting changes
             });
             
             cardSizeSlider.addEventListener('input', (e) => {
                 app.cardSize = parseInt(e.target.value);
                 cardSizeValue.textContent = e.target.value;
                 app.render();
+                app.saveToSupabase(); // Save setting changes
             });
             
             showCirclesCheckbox.addEventListener('change', (e) => {
                 app.showCircles = e.target.checked;
                 app.render();
+                app.saveToSupabase(); // Save setting changes
                 app.showNotification(
                     app.showCircles ? 'Circles shown' : 'Circles hidden', 
                     'info'
                 );
             });
             
-            console.log('✅ Business Card Canvas ready with vector rendering');
+            console.log('✅ Business Card Canvas ready with real-time collaboration');
+            console.log('🌐 Multi-device collaboration: Supabase-powered');
+            console.log('💾 Auto-save: Instant across all devices');
+            
+            // Setup instructions
+            if (!app.isConnected) {
+                console.log('');
+                console.log('🚀 SETUP SUPABASE FOR REAL COLLABORATION:');
+                console.log('1. Go to https://supabase.com and create a project');
+                console.log('2. Run this SQL in the SQL Editor:');
+                console.log(`
+CREATE TABLE canvas_data (
+  id text PRIMARY KEY DEFAULT 'shared-canvas',
+  cards jsonb DEFAULT '[]'::jsonb,
+  settings jsonb DEFAULT '{}'::jsonb,
+  updated_at timestamp with time zone DEFAULT now()
+);
+ALTER PUBLICATION supabase_realtime ADD TABLE canvas_data;
+INSERT INTO canvas_data (id) VALUES ('shared-canvas');`);
+                console.log('3. Update supabaseConfig with your project URL and anon key');
+                console.log('4. Refresh and enjoy real multi-device collaboration! 🎉');
+                console.log('');
+            }
         });
     </script>
 </body>
