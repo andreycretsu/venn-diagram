@@ -347,26 +347,17 @@ export class UIManager {
 
       preview.innerHTML = `
         <div class="preview-card" style="
-          background: linear-gradient(135deg, #1f2937, #111827);
-          color: #ffffff;
-          border: 2px solid #374151;
+          background: #ffffff;
+          color: #1e293b;
+          border: 2px solid #e2e8f0;
           position: relative;
           border-radius: 12px;
           padding: 20px;
           text-align: center;
           font-weight: bold;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         ">
           ${initials}
-          <div style="
-            position: absolute;
-            top: 4px;
-            right: 4px;
-            width: 8px;
-            height: 8px;
-            background: ${categoryColors[category]};
-            border-radius: 50%;
-            border: 1px solid white;
-          "></div>
         </div>
       `;
     }
@@ -433,16 +424,20 @@ export class UIManager {
 
   // Storage
   saveToStorage() {
-    const data = {
-      config: this.config,
-      cards: this.cardService.exportData(),
-      timestamp: new Date().toISOString()
-    };
-
     try {
-      localStorage.setItem('businessCardCanvas', JSON.stringify(data));
+      const data = {
+        config: this.config,
+        cards: this.cardService.exportData(),
+        timestamp: new Date().toISOString()
+      };
+
+      const dataString = JSON.stringify(data);
+      if (dataString && dataString !== 'null' && dataString !== 'undefined') {
+        localStorage.setItem('businessCardCanvas', dataString);
+      }
     } catch (error) {
       console.error('Failed to save to localStorage:', error);
+      // Don't show user notification for storage errors
     }
   }
 

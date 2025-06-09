@@ -248,9 +248,13 @@ if (typeof window !== 'undefined') {
   window.businessCardApp = app;
   
   // Development console helpers
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🔧 Development mode - app.dev helpers available');
-    console.log('📊 Use app.getStats() to view application statistics');
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
+      console.log('🔧 Development mode - app.dev helpers available');
+      console.log('📊 Use app.getStats() to view application statistics');
+    }
+  } catch (e) {
+    // process not available in browser, ignore
   }
 }
 

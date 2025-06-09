@@ -135,32 +135,40 @@ export class Canvas {
   }
 
   drawCard(card) {
-    const { cardSize } = this.config;
-    const borderRadius = Math.max(4, cardSize * 0.15);
-    const x = card.x - cardSize / 2;
-    const y = card.y - cardSize / 2;
-    const isSelected = this.selectedCards.includes(card);
-    const isHovered = this.hoveredCard === card;
+    try {
+      if (!card || typeof card.x !== 'number' || typeof card.y !== 'number') {
+        return;
+      }
 
-    this.ctx.save();
+      const { cardSize } = this.config;
+      const borderRadius = Math.max(4, cardSize * 0.15);
+      const x = card.x - cardSize / 2;
+      const y = card.y - cardSize / 2;
+      const isSelected = this.selectedCards && this.selectedCards.includes(card);
+      const isHovered = this.hoveredCard === card;
 
-    // Shadow (light shadow for unselected, no shadow for selected)
-    if (!isSelected) {
-      this.drawCardShadow(card, isSelected, isHovered);
+      this.ctx.save();
+
+      // Shadow (light shadow for unselected, no shadow for selected)
+      if (!isSelected) {
+        this.drawCardShadow(card, isSelected, isHovered);
+      }
+      
+      // Background
+      this.drawCardBackground(card, x, y, cardSize, borderRadius);
+      
+      // Border (only if selected)
+      if (isSelected) {
+        this.drawCardBorder(card, x, y, cardSize, borderRadius, isSelected, isHovered);
+      }
+      
+      // Content
+      this.drawCardContent(card, cardSize);
+
+      this.ctx.restore();
+    } catch (error) {
+      console.error('Error drawing card:', error, card);
     }
-    
-    // Background
-    this.drawCardBackground(card, x, y, cardSize, borderRadius);
-    
-    // Border (only if selected)
-    if (isSelected) {
-      this.drawCardBorder(card, x, y, cardSize, borderRadius, isSelected, isHovered);
-    }
-    
-    // Content
-    this.drawCardContent(card, cardSize);
-
-    this.ctx.restore();
   }
 
   drawCardShadow(card, isSelected, isHovered) {
@@ -297,24 +305,32 @@ export class Canvas {
   }
 
   render() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    
-    // Draw background
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
-    
-    // Draw circles if enabled
-    if (this.showCircles) {
-      this.drawCircles();
+    try {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      
+      // Draw background
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      
+      // Draw circles if enabled
+      if (this.showCircles) {
+        this.drawCircles();
+      }
+      
+      // Draw cards
+      if (this.cards && Array.isArray(this.cards)) {
+        this.cards.forEach(card => {
+          if (card && typeof card === 'object') {
+            this.drawCard(card);
+          }
+        });
+      }
+      
+      // Draw selection indicators
+      this.drawSelectionIndicators();
+    } catch (error) {
+      console.error('Canvas render error:', error);
     }
-    
-    // Draw cards
-    if (this.cards) {
-      this.cards.forEach(card => this.drawCard(card));
-    }
-    
-    // Draw selection indicators
-    this.drawSelectionIndicators();
   }
 
   drawCircles() {
