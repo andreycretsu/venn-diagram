@@ -519,6 +519,7 @@
                 this.subscription = null;
                 this.isConnected = false;
                 this.isUpdating = false;
+                this.dragSaveTimeout = null;
                 
                 this.init();
             }
@@ -694,17 +695,19 @@
             }
 
             handleRealtimeUpdate(data) {
-                this.cards = data.cards || [];
-                if (data.settings) {
-                    this.circleRadius = data.settings.circleRadius || 200;
-                    this.centerDistance = data.settings.centerDistance || 200;
-                    this.cardSize = data.settings.cardSize || 80;
-                    this.showCircles = data.settings.showCircles !== false;
-                    this.updateControlsUI();
+                // Only update if we're not currently dragging to prevent jumping
+                if (!this.isDragging) {
+                    this.cards = data.cards || [];
+                    if (data.settings) {
+                        this.circleRadius = data.settings.circleRadius || 200;
+                        this.centerDistance = data.settings.centerDistance || 200;
+                        this.cardSize = data.settings.cardSize || 80;
+                        this.showCircles = data.settings.showCircles !== false;
+                        this.updateControlsUI();
+                    }
+                    this.render();
                 }
-                
-                this.render();
-                this.showNotification('Updated from another device! 🌐', 'info');
+                // No notification for every update - too annoying!
             }
 
             async saveToSupabase() {
@@ -741,11 +744,7 @@
                     }
 
                     console.log('✅ Successfully saved to Supabase - all devices will sync!');
-                    this.updateStatus('connected', 'Synced ✅');
-                    
-                    setTimeout(() => {
-                        this.updateStatus('connected', 'Multi-Device Collaboration Active 🌐');
-                    }, 1500);
+                    // No need for constant status updates - just keep it simple
 
                 } catch (error) {
                     console.error('❌ Save to Supabase failed:', error.message);
@@ -846,7 +845,14 @@
                             
                             this.dragStartPos = mousePos;
                             this.render();
-                            this.saveToSupabase(); // Save when cards are moved
+                            
+                            // Debounce saving during drag to prevent jumping
+                            clearTimeout(this.dragSaveTimeout);
+                            this.dragSaveTimeout = setTimeout(() => {
+                                if (!this.isDragging) {
+                                    this.saveToSupabase();
+                                }
+                            }, 100);
                         }
                     } else {
                         // Check hover state
@@ -898,6 +904,11 @@
 
                 // Mouse up to end dragging
                 this.canvas.addEventListener('mouseup', (e) => {
+                    if (this.isDragging) {
+                        // Save immediately when dragging ends
+                        this.saveToSupabase();
+                    }
+                    
                     this.isDragging = false;
                     this.dragStartPos = null;
                     
@@ -970,7 +981,10 @@
                     
                     img.onload = () => {
                         this.loadedLogos.set(logoUrl, img);
-                        this.render(); // Re-render when logo loads
+                        // Only re-render if not currently dragging to prevent flashing
+                        if (!this.isDragging) {
+                            this.render();
+                        }
                         resolve(img);
                     };
                     
@@ -1200,7 +1214,7 @@
                 });
 
                 this.render();
-                this.showNotification(`Added ${companies.length} companies!`, 'success');
+                // No notification needed for populating
             }
 
             exportCanvas() {
@@ -1208,7 +1222,7 @@
                 link.download = 'business-cards.png';
                 link.href = this.canvas.toDataURL();
                 link.click();
-                this.showNotification('Canvas exported!', 'success');
+                // No notification needed for export
             }
 
             showNotification(message, type = 'info') {
@@ -1343,7 +1357,7 @@
                 showLogoPreview(dataUrl);
                 uploadedLogoData = dataUrl;
                 
-                app.showNotification('SVG code processed successfully!', 'success');
+                // SVG processed silently
             } catch (error) {
                 app.showNotification('Invalid SVG code', 'error');
             }
@@ -1400,7 +1414,7 @@
 
             app.render();
             closeModal('addCardModal');
-            app.showNotification(`Added ${companyName}!`, 'success');
+            // No notification needed for adding cards
             
             // Clear form
             document.getElementById('companyName').value = '';
@@ -1464,10 +1478,7 @@
                 app.showCircles = e.target.checked;
                 app.render();
                 app.saveToSupabase(); // Save setting changes
-                app.showNotification(
-                    app.showCircles ? 'Circles shown' : 'Circles hidden', 
-                    'info'
-                );
+                // No notification needed for simple toggle
             });
             
             console.log('✅ Business Card Canvas ready with real-time collaboration');
