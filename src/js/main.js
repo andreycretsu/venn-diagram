@@ -247,15 +247,9 @@ const app = new BusinessCardApp();
 if (typeof window !== 'undefined') {
   window.businessCardApp = app;
   
-  // Development console helpers
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
-      console.log('🔧 Development mode - app.dev helpers available');
-      console.log('📊 Use app.getStats() to view application statistics');
-    }
-  } catch (e) {
-    // process not available in browser, ignore
-  }
+  // Development console helpers available
+  console.log('🔧 Business Card Canvas v2.0.0 ready');
+  console.log('📊 Use businessCardApp.getStats() to view application statistics');
 }
 
 export { BusinessCardApp }; 
