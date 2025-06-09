@@ -526,37 +526,49 @@
 
             async initSupabase() {
                 try {
-                    // Test Supabase connection
-                    console.log('🔄 Testing Supabase connection...');
+                    console.log('🔄 FULL SUPABASE SETUP STARTING...');
                     supabaseClient = supabase.createClient(supabaseConfig.url, supabaseConfig.key);
                     
-                    // Test the connection with a simple query
-                    const { data, error } = await supabaseClient
+                    // 1. Test basic connection
+                    console.log('1️⃣ Testing database connection...');
+                    const { data: testData, error: testError } = await supabaseClient
                         .from('canvas_data')
                         .select('id')
                         .limit(1);
                     
-                    if (error) {
-                        console.error('❌ Supabase connection test failed:', error);
-                        throw error;
+                    if (testError && testError.code !== 'PGRST116') {
+                        throw new Error(`Database connection failed: ${testError.message}`);
                     }
+                    console.log('✅ Database connection OK');
                     
-                    console.log('✅ Supabase connection successful!');
+                    // 2. Setup storage IMMEDIATELY
+                    console.log('2️⃣ Setting up storage bucket...');
                     this.supabase = supabaseClient;
+                    await this.setupStorageBucket();
+                    console.log('✅ Storage setup complete');
+                    
+                    // 3. Test storage upload
+                    console.log('3️⃣ Testing storage upload...');
+                    await this.testStorageUpload();
+                    console.log('✅ Storage upload test passed');
+                    
                     this.isConnected = true;
                     
-                    // Load initial data
+                    // 4. Load/create data
                     await this.loadFromSupabase();
                     
-                    // Set up real-time collaboration
+                    // 5. Setup real-time
                     this.setupRealTimeSubscription();
-                    this.updateStatus('connected', 'Multi-Device Collaboration Active 🌐');
+                    this.updateStatus('connected', 'FULL COLLABORATION ACTIVE 🚀');
+                    
+                    console.log('🎉 SUPABASE FULLY CONFIGURED AND WORKING!');
                     
                 } catch (error) {
-                    console.error('❌ Supabase setup failed:', error.message);
-                    this.updateStatus('disconnected', 'Local Mode - No Collaboration');
+                    console.error('💥 SUPABASE SETUP FAILED:', error.message);
+                    console.error('📋 Full error:', error);
+                    this.updateStatus('disconnected', `OFFLINE: ${error.message}`);
                     
-                    // Fallback to localStorage only
+                    // Fallback to localStorage
                     this.loadFromStorage();
                     if (this.cards.length === 0) {
                         this.initializeCleanCanvas();
@@ -1176,75 +1188,129 @@
                 this.render();
             }
 
-            async ensureLogosStorage() {
+            async setupStorageBucket() {
                 try {
-                    // Check if logos bucket exists
+                    console.log('📁 Setting up logos storage bucket...');
+                    
+                    // First, list all buckets to see what exists
                     const { data: buckets, error: listError } = await this.supabase.storage.listBuckets();
                     
                     if (listError) {
-                        console.error('❌ Could not list buckets:', listError);
-                        return;
+                        throw new Error(`Cannot list buckets: ${listError.message}`);
                     }
-
+                    
+                    console.log('📋 Existing buckets:', buckets.map(b => b.name));
+                    
                     const logosBucket = buckets.find(bucket => bucket.name === 'logos');
                     
                     if (!logosBucket) {
-                        console.log('📁 Creating logos storage bucket...');
+                        console.log('📁 Creating new logos bucket...');
                         
-                        // Create the bucket
-                        const { data, error } = await this.supabase.storage.createBucket('logos', {
+                        // Create bucket with proper settings
+                        const { data: createData, error: createError } = await this.supabase.storage.createBucket('logos', {
                             public: true,
-                            allowedMimeTypes: ['image/svg+xml', 'image/png'],
+                            allowedMimeTypes: ['image/svg+xml', 'image/png', 'image/jpeg'],
                             fileSizeLimit: 10485760 // 10MB
                         });
 
-                        if (error) {
-                            console.error('❌ Failed to create logos bucket:', error);
-                            return;
+                        if (createError) {
+                            throw new Error(`Bucket creation failed: ${createError.message}`);
                         }
                         
-                        console.log('✅ Logos storage bucket created successfully');
+                        console.log('✅ Logos bucket created:', createData);
+                    } else {
+                        console.log('✅ Logos bucket already exists');
                     }
+                    
+                    // Test bucket accessibility
+                    const { data: testList, error: testError } = await this.supabase.storage
+                        .from('logos')
+                        .list('', { limit: 1 });
+                        
+                    if (testError) {
+                        throw new Error(`Bucket access test failed: ${testError.message}`);
+                    }
+                    
+                    console.log('✅ Bucket is accessible');
+                    
                 } catch (error) {
-                    console.error('❌ Error setting up storage:', error);
+                    throw new Error(`Storage setup failed: ${error.message}`);
+                }
+            }
+
+            async testStorageUpload() {
+                try {
+                    // Create a tiny test SVG
+                    const testSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="3" fill="red"/></svg>';
+                    const blob = new Blob([testSVG], { type: 'image/svg+xml' });
+                    const testFileName = `test-${Date.now()}.svg`;
+                    
+                    // Try to upload
+                    const { data: uploadData, error: uploadError } = await this.supabase.storage
+                        .from('logos')
+                        .upload(testFileName, blob, {
+                            cacheControl: '3600',
+                            upsert: true,
+                            contentType: 'image/svg+xml'
+                        });
+
+                    if (uploadError) {
+                        throw new Error(`Test upload failed: ${uploadError.message}`);
+                    }
+
+                    // Get public URL
+                    const { data: urlData } = this.supabase.storage
+                        .from('logos')
+                        .getPublicUrl(testFileName);
+
+                    console.log('📤 Test file uploaded:', urlData.publicUrl);
+
+                    // Clean up test file
+                    await this.supabase.storage
+                        .from('logos')
+                        .remove([testFileName]);
+                        
+                    console.log('🧹 Test file cleaned up');
+
+                } catch (error) {
+                    throw new Error(`Storage test failed: ${error.message}`);
                 }
             }
 
             async uploadLogoToStorage(file) {
                 if (!this.supabase || !this.isConnected) {
-                    console.log('📁 No Supabase connection - using data URL fallback');
-                    return null;
+                    throw new Error('Supabase not connected');
                 }
 
                 try {
-                    // Ensure logos bucket exists
-                    await this.ensureLogosStorage();
-
                     // Generate unique filename
                     const timestamp = Date.now();
                     const randomId = Math.random().toString(36).substring(2, 15);
                     const extension = file.name.split('.').pop() || (file.type.includes('svg') ? 'svg' : 'png');
                     const fileName = `logo-${timestamp}-${randomId}.${extension}`;
 
-                    console.log('📤 Uploading logo to Supabase Storage...', fileName);
+                    console.log('📤 UPLOADING:', fileName, 'Size:', file.size, 'Type:', file.type);
 
-                    // Upload to Supabase Storage with proper headers for SVG
+                    // Upload with proper options
                     const uploadOptions = {
                         cacheControl: '3600',
-                        upsert: false
+                        upsert: true // Allow overwrite to avoid conflicts
                     };
 
+                    // Set correct content type
                     if (file.type.includes('svg')) {
                         uploadOptions.contentType = 'image/svg+xml';
+                    } else if (file.type.includes('png')) {
+                        uploadOptions.contentType = 'image/png';
                     }
 
-                    const { data, error } = await this.supabase.storage
+                    const { data: uploadData, error: uploadError } = await this.supabase.storage
                         .from('logos')
                         .upload(fileName, file, uploadOptions);
 
-                    if (error) {
-                        console.error('❌ Storage upload error:', error);
-                        throw error;
+                    if (uploadError) {
+                        console.error('💥 UPLOAD ERROR:', uploadError);
+                        throw new Error(`Upload failed: ${uploadError.message}`);
                     }
 
                     // Get public URL
@@ -1252,47 +1318,43 @@
                         .from('logos')
                         .getPublicUrl(fileName);
 
-                    console.log('✅ Logo uploaded successfully:', urlData.publicUrl);
+                    console.log('🎉 UPLOAD SUCCESS:', urlData.publicUrl);
                     return urlData.publicUrl;
 
                 } catch (error) {
-                    console.error('❌ Logo upload failed:', error);
-                    return null;
+                    console.error('💥 LOGO UPLOAD COMPLETELY FAILED:', error);
+                    throw error;
                 }
             }
 
             async uploadSVGCodeToStorage(svgCode) {
                 if (!this.supabase || !this.isConnected) {
-                    console.log('📁 No Supabase connection - using data URL fallback');
-                    return null;
+                    throw new Error('Supabase not connected');
                 }
 
                 try {
-                    // Ensure logos bucket exists
-                    await this.ensureLogosStorage();
-
                     // Generate unique filename
                     const timestamp = Date.now();
                     const randomId = Math.random().toString(36).substring(2, 15);
                     const fileName = `svg-${timestamp}-${randomId}.svg`;
 
-                    console.log('📤 Uploading SVG code to Supabase Storage...', fileName);
+                    console.log('📤 UPLOADING SVG CODE:', fileName, 'Length:', svgCode.length);
 
                     // Create blob from SVG code with proper MIME type
                     const blob = new Blob([svgCode], { type: 'image/svg+xml' });
 
                     // Upload to Supabase Storage
-                    const { data, error } = await this.supabase.storage
+                    const { data: uploadData, error: uploadError } = await this.supabase.storage
                         .from('logos')
                         .upload(fileName, blob, {
                             cacheControl: '3600',
-                            upsert: false,
+                            upsert: true,
                             contentType: 'image/svg+xml'
                         });
 
-                    if (error) {
-                        console.error('❌ Storage upload error:', error);
-                        throw error;
+                    if (uploadError) {
+                        console.error('💥 SVG UPLOAD ERROR:', uploadError);
+                        throw new Error(`SVG upload failed: ${uploadError.message}`);
                     }
 
                     // Get public URL
@@ -1300,12 +1362,12 @@
                         .from('logos')
                         .getPublicUrl(fileName);
 
-                    console.log('✅ SVG uploaded successfully:', urlData.publicUrl);
+                    console.log('🎉 SVG UPLOAD SUCCESS:', urlData.publicUrl);
                     return urlData.publicUrl;
 
                 } catch (error) {
-                    console.error('❌ SVG upload failed:', error);
-                    return null;
+                    console.error('💥 SVG UPLOAD COMPLETELY FAILED:', error);
+                    throw error;
                 }
             }
 
@@ -1422,36 +1484,41 @@
                 return;
             }
             
+            const uploadArea = document.getElementById('logoUploadArea');
+            
             try {
                 // Show loading state
-                const uploadArea = document.getElementById('logoUploadArea');
                 uploadArea.style.opacity = '0.5';
                 uploadArea.style.pointerEvents = 'none';
                 
-                // Upload to Supabase Storage
+                console.log('🔄 PROCESSING FILE:', file.name, file.type, file.size);
+                
+                // Try Supabase Storage upload first
                 const logoUrl = await app.uploadLogoToStorage(file);
                 
-                if (logoUrl) {
-                    showLogoPreview(logoUrl);
-                    uploadedLogoData = logoUrl;
-                    console.log('✅ Logo uploaded to Supabase Storage:', logoUrl);
-                } else {
-                    throw new Error('Upload failed');
-                }
+                showLogoPreview(logoUrl);
+                uploadedLogoData = logoUrl;
+                app.showNotification('✅ Logo uploaded to cloud storage!', 'success');
+                
             } catch (error) {
-                console.error('❌ Logo upload failed:', error);
-                app.showNotification('Logo upload failed, using local copy', 'error');
+                console.error('💥 STORAGE UPLOAD FAILED:', error);
+                app.showNotification(`Storage failed: ${error.message}. Using local copy.`, 'error');
                 
                 // Fallback to data URL
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    showLogoPreview(e.target.result);
-                    uploadedLogoData = e.target.result;
-                };
-                reader.readAsDataURL(file);
+                try {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        showLogoPreview(e.target.result);
+                        uploadedLogoData = e.target.result;
+                        app.showNotification('Using local logo copy (no cloud sync)', 'info');
+                    };
+                    reader.readAsDataURL(file);
+                } catch (fallbackError) {
+                    console.error('💥 EVEN FALLBACK FAILED:', fallbackError);
+                    app.showNotification('Logo processing completely failed', 'error');
+                }
             } finally {
                 // Restore upload area
-                const uploadArea = document.getElementById('logoUploadArea');
                 uploadArea.style.opacity = '1';
                 uploadArea.style.pointerEvents = 'auto';
             }
