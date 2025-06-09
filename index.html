@@ -428,9 +428,7 @@
             <button class="floating-button" onclick="toggleControlsModal()" title="Circle Controls" id="controlsFab">
                 <i class="fas fa-sliders-h"></i>
             </button>
-            <button class="floating-button" onclick="populateCanvas()" title="Populate">
-                <i class="fas fa-magic"></i>
-            </button>
+
             <button class="floating-button success" onclick="exportCanvas()" title="Export">
                 <i class="fas fa-download"></i>
             </button>
@@ -466,17 +464,7 @@
                 </div>
             </div>
             
-            <div class="form-group">
-                <label class="form-label">Category</label>
-                <select id="cardCategory" class="form-select">
-                    <option value="technology">Technology</option>
-                    <option value="finance">Finance</option>
-                    <option value="healthcare">Healthcare</option>
-                    <option value="education">Education</option>
-                    <option value="retail">Retail</option>
-                    <option value="other">Other</option>
-                </select>
-            </div>
+
             
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('addCardModal')">Cancel</button>
@@ -567,7 +555,7 @@
                     // Fallback to localStorage only
                     this.loadFromStorage();
                     if (this.cards.length === 0) {
-                        this.loadExampleCompanies();
+                        this.initializeCleanCanvas();
                     }
                 }
             }
@@ -623,15 +611,13 @@
                         console.log('✅ Loaded from Supabase:', this.cards.length, 'cards');
                     }
 
-                    // Load examples if no cards exist
+                    // Start with clean canvas if no cards exist
                     if (this.cards.length === 0) {
-                        this.loadExampleCompanies();
-                        // Save the examples to Supabase
-                        await this.saveToSupabase();
+                        this.initializeCleanCanvas();
                     }
                 } catch (error) {
                     console.error('❌ Error loading from Supabase:', error.message);
-                    this.loadExampleCompanies();
+                    this.initializeCleanCanvas();
                 }
             }
 
@@ -656,11 +642,10 @@
                     if (error) throw error;
                     
                     console.log('✅ Created initial Supabase record');
-                    this.loadExampleCompanies();
-                    await this.saveToSupabase();
+                    this.initializeCleanCanvas();
                 } catch (error) {
                     console.error('❌ Failed to create initial record:', error.message);
-                    this.loadExampleCompanies();
+                    this.initializeCleanCanvas();
                 }
             }
 
@@ -955,7 +940,6 @@
                     id: Date.now() + Math.random(),
                     company: data.company,
                     logo: data.logo || '',
-                    category: data.category || 'technology',
                     x: data.x,
                     y: data.y
                 };
@@ -1166,56 +1150,12 @@
                 this.ctx.quadraticCurveTo(x, y, x + radius, y);
             }
 
-            loadExampleCompanies() {
-                // Position example cards within the repositioned circles
-                const rect = this.canvas.getBoundingClientRect();
-                const centerX = rect.width / 2;
-                const centerY = rect.height * 0.4;
-                const offset = this.centerDistance;
-                
-                const examples = [
-                    { company: 'Workday', category: 'technology', x: centerX - offset, y: centerY - offset/3 },
-                    { company: 'Gusto', category: 'technology', x: centerX + offset, y: centerY - offset/3 },
-                    { company: 'Expensify', category: 'finance', x: centerX, y: centerY + offset/2 },
-                    { company: 'ADP', category: 'technology', x: centerX - offset/2, y: centerY },
-                    { company: 'Concur', category: 'finance', x: centerX + offset/2, y: centerY + offset/4 }
-                ];
-
-                examples.forEach(data => this.createCard(data));
+            initializeCleanCanvas() {
+                // Start with an empty canvas - no default cards
                 this.render();
-                
-                setTimeout(() => {
-                    this.showNotification('Welcome! Auto-saving enabled. Add logos, drag cards, use controls to customize.', 'info');
-                }, 1000);
             }
 
-            populateWithCompanies() {
-                const companies = [
-                    'BambooHR', 'Zenefits', 'Justworks', 'TriNet', 'Paychex',
-                    'QuickBooks', 'FreshBooks', 'Wave', 'Xero', 'Sage',
-                    'Ramp', 'Brex', 'Divvy', 'Pleo', 'Mercury'
-                ];
 
-                const rect = this.canvas.getBoundingClientRect();
-                const centerX = rect.width / 2;
-                const centerY = rect.height * 0.4;
-                const radius = 150;
-
-                companies.forEach((company, i) => {
-                    const angle = (i / companies.length) * 2 * Math.PI;
-                    const x = centerX + Math.cos(angle) * radius;
-                    const y = centerY + Math.sin(angle) * radius;
-                    
-                    this.createCard({
-                        company,
-                        category: i < 5 ? 'technology' : i < 10 ? 'finance' : 'other',
-                        x, y
-                    });
-                });
-
-                this.render();
-                // No notification needed for populating
-            }
 
             exportCanvas() {
                 const link = document.createElement('a');
@@ -1393,7 +1333,6 @@
 
         function addBusinessCard() {
             const companyName = document.getElementById('companyName').value.trim();
-            const category = document.getElementById('cardCategory').value;
 
             if (!companyName) {
                 app.showNotification('Please enter a company name', 'error');
@@ -1407,7 +1346,6 @@
             app.createCard({
                 company: companyName,
                 logo: uploadedLogoData, // Use uploaded logo data
-                category,
                 x: app.clickPosition.x,
                 y: app.clickPosition.y
             });
@@ -1421,9 +1359,7 @@
             resetFileUpload();
         }
 
-        function populateCanvas() {
-            app.populateWithCompanies();
-        }
+
 
         function exportCanvas() {
             app.exportCanvas();
