@@ -3,291 +3,549 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Card Canvas - Executive Edition</title>
-    <meta name="description" content="Professional business card visualization with Executive theme - Create, manage, and export beautiful business card layouts">
-    <meta name="author" content="Andrey Cretsu">
-    
-    <!-- Favicon -->
+    <title>Business Card Canvas</title>
     <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
-    
-    <!-- Preconnect for performance -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous">
-    
-    <!-- Styles -->
-    <link rel="stylesheet" href="src/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --color-background: #ffffff;
+            --color-surface: #f8fafc;
+            --color-border: #e2e8f0;
+            --color-text-primary: #1e293b;
+            --color-primary: #3b82f6;
+            --space-md: 1rem;
+            --space-lg: 1.5rem;
+            --radius-lg: 12px;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--color-background);
+            color: var(--color-text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: var(--color-background);
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background: var(--color-background);
+        }
+
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: var(--color-background);
+            cursor: crosshair;
+        }
+
+        .floating-controls {
+            position: fixed;
+            bottom: var(--space-lg);
+            right: var(--space-lg);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+            z-index: 1000;
+        }
+
+        .floating-button {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: var(--color-primary);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: var(--shadow-md);
+            transition: all 0.2s;
+        }
+
+        .floating-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.2);
+        }
+
+        .floating-button.success { background: #10b981; }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal-content {
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            padding: var(--space-lg);
+            max-width: 400px;
+            width: 90%;
+            box-shadow: var(--shadow-md);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-lg);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--color-text-primary);
+        }
+
+        .form-group {
+            margin-bottom: var(--space-md);
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--color-surface);
+            color: var(--color-text-primary);
+            border: 1px solid var(--color-border);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: var(--space-md);
+            justify-content: flex-end;
+            margin-top: var(--space-lg);
+        }
+
+        .notification {
+            position: fixed;
+            top: var(--space-lg);
+            right: var(--space-lg);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-md);
+            box-shadow: var(--shadow-md);
+            z-index: 3000;
+            max-width: 300px;
+        }
+
+        .notification.success { border-left: 4px solid #10b981; }
+        .notification.error { border-left: 4px solid #ef4444; }
+        .notification.info { border-left: 4px solid var(--color-primary); }
+    </style>
 </head>
 <body>
     <div class="app">
-        <!-- Main Canvas Container -->
-        <div class="canvas-container" id="canvasContainer">
+        <div class="canvas-container">
             <canvas id="canvas"></canvas>
-            
-            <!-- Canvas Loading Overlay -->
-            <div class="canvas-loading" id="canvasLoading" style="display: none;">
-                <div class="spinner"></div>
-            </div>
         </div>
 
-        <!-- Floating Action Buttons -->
         <div class="floating-controls">
-            <button class="floating-button executive" onclick="openAddCardModal()" title="Add Business Card" aria-label="Add Business Card">
+            <button class="floating-button" onclick="openAddCardModal()" title="Add Card">
                 <i class="fas fa-plus"></i>
-                <span class="control-tooltip">Add Card</span>
             </button>
-            <button class="floating-button" onclick="openSettingsModal()" title="Settings" aria-label="Open Settings">
-                <i class="fas fa-cog"></i>
-                <span class="control-tooltip">Settings</span>
+            <button class="floating-button" onclick="populateCanvas()" title="Populate">
+                <i class="fas fa-magic"></i>
             </button>
-            <button class="floating-button success" onclick="exportCanvas()" title="Export Canvas" aria-label="Export Canvas">
+            <button class="floating-button success" onclick="exportCanvas()" title="Export">
                 <i class="fas fa-download"></i>
-                <span class="control-tooltip">Export</span>
             </button>
         </div>
     </div>
 
     <!-- Add Card Modal -->
-    <div class="modal" id="addCardModal" role="dialog" aria-labelledby="addCardTitle" aria-hidden="true">
-        <div class="modal-overlay" onclick="closeModal('addCardModal')"></div>
+    <div class="modal" id="addCardModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="modal-title" id="addCardTitle">
-                    <i class="fas fa-plus-circle"></i>
-                    Add Business Card
-                </h2>
-                <button class="modal-close" onclick="closeModal('addCardModal')" aria-label="Close modal">
-                    <i class="fas fa-times"></i>
-                </button>
+                <h2 class="modal-title">Add Business Card</h2>
+                <button class="modal-close" onclick="closeModal('addCardModal')">×</button>
             </div>
             
-            <div class="modal-body">
-                <form class="add-card-form">
-                    <div class="form-group">
-                        <label for="companyName" class="form-label">
-                            <i class="fas fa-building"></i>
-                            Company Name
-                        </label>
-                        <input 
-                            type="text" 
-                            id="companyName" 
-                            class="form-input"
-                            placeholder="Enter company name" 
-                            autocomplete="organization"
-                            required
-                        >
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="cardCategory" class="form-label">
-                            <i class="fas fa-tag"></i>
-                            Category
-                        </label>
-                        <select id="cardCategory" class="form-select">
-                            <option value="technology">Technology</option>
-                            <option value="finance">Finance</option>
-                            <option value="healthcare">Healthcare</option>
-                            <option value="education">Education</option>
-                            <option value="retail">Retail</option>
-                            <option value="manufacturing">Manufacturing</option>
-                            <option value="services">Services</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="logoUrl" class="form-label">
-                            <i class="fas fa-image"></i>
-                            Logo URL (Optional)
-                        </label>
-                        <input 
-                            type="url" 
-                            id="logoUrl" 
-                            class="form-input"
-                            placeholder="Enter image URL or leave blank for auto-generated logo"
-                        >
-                    </div>
-                    
-                    <div class="status-display">
-                        <div class="status-item">
-                            <span class="status-label">
-                                <i class="fas fa-crosshairs"></i>
-                                Position
-                            </span>
-                            <span class="status-value" id="selectedPosition">Click on canvas</span>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-eye"></i>
-                            Preview
-                        </label>
-                        <div class="card-preview" id="cardPreview">
-                            <div class="preview-card">Preview will appear here</div>
-                        </div>
-                    </div>
-                </form>
+            <div class="form-group">
+                <label class="form-label">Company Name</label>
+                <input type="text" id="companyName" class="form-input" placeholder="Enter company name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <select id="cardCategory" class="form-select">
+                    <option value="technology">Technology</option>
+                    <option value="finance">Finance</option>
+                    <option value="healthcare">Healthcare</option>
+                    <option value="education">Education</option>
+                    <option value="retail">Retail</option>
+                    <option value="other">Other</option>
+                </select>
             </div>
             
             <div class="modal-footer">
-                <button class="modal-button secondary" onclick="closeModal('addCardModal')">
-                    <i class="fas fa-times"></i>
-                    Cancel
-                </button>
-                <button class="modal-button primary" onclick="addBusinessCard()">
-                    <i class="fas fa-plus"></i>
-                    Add Card
-                </button>
+                <button class="btn btn-secondary" onclick="closeModal('addCardModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="addBusinessCard()">Add Card</button>
             </div>
         </div>
     </div>
 
-    <!-- Settings Modal -->
-    <div class="modal" id="settingsModal" role="dialog" aria-labelledby="settingsTitle" aria-hidden="true">
-        <div class="modal-overlay" onclick="closeModal('settingsModal')"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="settingsTitle">
-                    <i class="fas fa-cog"></i>
-                    Canvas Settings
-                </h2>
-                <button class="modal-close" onclick="closeModal('settingsModal')" aria-label="Close modal">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="modal-body">
-                <div class="settings-section">
-                    <h3 class="settings-section-title">
-                        <i class="fas fa-circle"></i>
-                        Circle Controls
-                    </h3>
-                    
-                    <div class="settings-grid">
-                        <div class="slider-group">
-                            <div class="slider-label">
-                                <span>Circle Radius</span>
-                                <span class="slider-value" id="radiusValue">180px</span>
-                            </div>
-                            <input type="range" id="circleRadius" class="slider" min="50" max="400" value="180" aria-label="Circle Radius">
-                        </div>
-                        
-                        <div class="slider-group">
-                            <div class="slider-label">
-                                <span>Circle Distance</span>
-                                <span class="slider-value" id="spacingValue">310px</span>
-                            </div>
-                            <input type="range" id="circleSpacing" class="slider" min="100" max="800" value="310" aria-label="Circle Distance">
-                        </div>
-                        
-                        <div class="slider-group">
-                            <div class="slider-label">
-                                <span>Circle Opacity</span>
-                                <span class="slider-value" id="opacityValue">30%</span>
-                            </div>
-                            <input type="range" id="circleOpacity" class="slider" min="0" max="100" value="30" aria-label="Circle Opacity">
-                        </div>
-                        
-                        <div class="slider-group">
-                            <div class="slider-label">
-                                <span>Card Size</span>
-                                <span class="slider-value" id="cardSizeValue">80px</span>
-                            </div>
-                            <input type="range" id="cardSize" class="slider" min="40" max="150" value="80" aria-label="Card Size">
-                        </div>
-                    </div>
-                    
-                    <div class="button-group">
-                        <button class="modal-button secondary" onclick="toggleCircles()">
-                            <i class="fas fa-eye"></i>
-                            Toggle Circles
-                        </button>
-                        <button class="modal-button primary" onclick="setOptimalSpacing()">
-                            <i class="fas fa-magic"></i>
-                            Perfect Alignment
-                        </button>
-                    </div>
-                </div>
+    <script>
+        // Single consolidated script - no modules, no imports, no process issues
+        class BusinessCardCanvas {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.cards = [];
+                this.selectedCards = [];
+                this.clickPosition = { x: 0, y: 0 };
+                this.showCircles = true;
+                this.cardSize = 80;
                 
-                <div class="settings-section">
-                    <h3 class="settings-section-title">
-                        <i class="fas fa-database"></i>
-                        Card Management
-                    </h3>
+                this.init();
+            }
+
+            init() {
+                this.resizeCanvas();
+                this.setupEventListeners();
+                this.loadExampleCompanies();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            resizeCanvas() {
+                const rect = this.canvas.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+                this.render();
+            }
+
+            setupEventListeners() {
+                this.canvas.addEventListener('click', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.clickPosition = {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top
+                    };
                     
-                    <div class="button-group">
-                        <button class="modal-button primary" onclick="populateCanvas()">
-                            <i class="fas fa-magic"></i>
-                            Populate with Companies
-                        </button>
-                        <button class="modal-button secondary" onclick="clearAndPopulate()">
-                            <i class="fas fa-sync-alt"></i>
-                            Reset & Populate
-                        </button>
-                    </div>
+                    const clickedCard = this.getCardAt(this.clickPosition.x, this.clickPosition.y);
+                    if (clickedCard) {
+                        this.toggleCardSelection(clickedCard);
+                    } else {
+                        this.selectedCards = [];
+                    }
+                    this.render();
+                });
+            }
+
+            getCardAt(x, y) {
+                return this.cards.find(card => {
+                    const dist = Math.sqrt(
+                        Math.pow(x - card.x, 2) + Math.pow(y - card.y, 2)
+                    );
+                    return dist <= this.cardSize / 2;
+                });
+            }
+
+            toggleCardSelection(card) {
+                const index = this.selectedCards.indexOf(card);
+                if (index > -1) {
+                    this.selectedCards.splice(index, 1);
+                } else {
+                    this.selectedCards.push(card);
+                }
+            }
+
+            createCard(data) {
+                const card = {
+                    id: Date.now() + Math.random(),
+                    company: data.company,
+                    category: data.category || 'technology',
+                    x: data.x,
+                    y: data.y
+                };
+                this.cards.push(card);
+                return card;
+            }
+
+            render() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // White background
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw circles
+                if (this.showCircles) {
+                    this.drawCircles();
+                }
+                
+                // Draw cards
+                this.cards.forEach(card => this.drawCard(card));
+            }
+
+            drawCircles() {
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const radius = Math.min(this.canvas.width, this.canvas.height) / 4;
+                const offset = radius * 0.6;
+
+                const circles = [
+                    { x: centerX - offset, y: centerY - offset/2, label: 'HRIS', color: 'rgba(59, 130, 246, 0.1)' },
+                    { x: centerX + offset, y: centerY - offset/2, label: 'Payroll', color: 'rgba(16, 185, 129, 0.1)' },
+                    { x: centerX, y: centerY + offset, label: 'Expense', color: 'rgba(239, 68, 68, 0.1)' }
+                ];
+
+                circles.forEach(circle => {
+                    this.ctx.save();
+                    this.ctx.globalAlpha = 0.3;
+                    this.ctx.fillStyle = circle.color;
+                    this.ctx.strokeStyle = circle.color.replace('0.1', '0.6');
+                    this.ctx.lineWidth = 2;
                     
-                    <div class="button-group">
-                        <button class="modal-button secondary" onclick="selectAllCards()">
-                            <i class="fas fa-check-square"></i>
-                            Select All
-                        </button>
-                        <button class="modal-button secondary" onclick="deselectAllCards()">
-                            <i class="fas fa-square"></i>
-                            Deselect All
-                        </button>
-                        <button class="modal-button secondary" onclick="clearAllCards()">
-                            <i class="fas fa-trash-alt"></i>
-                            Clear All
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+                    this.ctx.beginPath();
+                    this.ctx.arc(circle.x, circle.y, radius, 0, 2 * Math.PI);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                    this.ctx.restore();
 
-    <!-- Context Menu -->
-    <div class="context-menu" id="contextMenu" role="menu" aria-hidden="true">
-        <div class="context-menu-item" onclick="editCard()" role="menuitem">
-            <i class="context-menu-icon fas fa-edit"></i>
-            <span class="context-menu-text">Edit Card</span>
-        </div>
-        <div class="context-menu-item" onclick="duplicateCard()" role="menuitem">
-            <i class="context-menu-icon fas fa-copy"></i>
-            <span class="context-menu-text">Duplicate</span>
-        </div>
-        <div class="context-menu-separator"></div>
-        <div class="context-menu-item danger" onclick="deleteCardFromContext()" role="menuitem">
-            <i class="context-menu-icon fas fa-trash"></i>
-            <span class="context-menu-text">Delete</span>
-        </div>
-    </div>
+                    // Labels
+                    this.ctx.fillStyle = '#374151';
+                    this.ctx.font = 'bold 16px Inter, sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText(circle.label, circle.x, circle.y - radius - 30);
+                });
+            }
 
-    <!-- Toast Container for Notifications -->
-    <div class="toast-container" id="toastContainer"></div>
+            drawCard(card) {
+                const isSelected = this.selectedCards.includes(card);
+                const x = card.x - this.cardSize / 2;
+                const y = card.y - this.cardSize / 2;
 
-    <!-- Application Script -->
-    <script type="module" src="src/js/main.js"></script>
-    
-    <!-- Structured Data for SEO -->
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "Business Card Canvas - Executive Edition",
-        "description": "Professional business card visualization with Executive theme",
-        "author": {
-            "@type": "Person",
-            "name": "Andrey Cretsu"
-        },
-        "applicationCategory": "BusinessApplication",
-        "operatingSystem": "Any"
-    }
+                this.ctx.save();
+
+                // Shadow for unselected cards
+                if (!isSelected) {
+                    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+                    this.ctx.shadowBlur = 8;
+                    this.ctx.shadowOffsetY = 2;
+                }
+
+                // White background
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.beginPath();
+                this.roundRect(x, y, this.cardSize, this.cardSize, 12);
+                this.ctx.fill();
+
+                // Reset shadow
+                this.ctx.shadowColor = 'transparent';
+                this.ctx.shadowBlur = 0;
+                this.ctx.shadowOffsetY = 0;
+
+                // Blue border if selected
+                if (isSelected) {
+                    this.ctx.strokeStyle = '#3b82f6';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.roundRect(x, y, this.cardSize, this.cardSize, 12);
+                    this.ctx.stroke();
+                }
+
+                // Company initials
+                this.ctx.fillStyle = '#1e293b';
+                this.ctx.font = `bold ${Math.max(14, this.cardSize * 0.25)}px Inter, sans-serif`;
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                
+                const initials = card.company
+                    .split(' ')
+                    .filter(word => word.length > 0)
+                    .slice(0, 2)
+                    .map(word => word[0].toUpperCase())
+                    .join('');
+                
+                this.ctx.fillText(initials, card.x, card.y);
+                this.ctx.restore();
+            }
+
+            roundRect(x, y, width, height, radius) {
+                this.ctx.moveTo(x + radius, y);
+                this.ctx.lineTo(x + width - radius, y);
+                this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                this.ctx.lineTo(x + width, y + height - radius);
+                this.ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                this.ctx.lineTo(x + radius, y + height);
+                this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                this.ctx.lineTo(x, y + radius);
+                this.ctx.quadraticCurveTo(x, y, x + radius, y);
+            }
+
+            loadExampleCompanies() {
+                const examples = [
+                    { company: 'Workday', category: 'technology', x: 300, y: 200 },
+                    { company: 'Gusto', category: 'technology', x: 500, y: 200 },
+                    { company: 'Expensify', category: 'finance', x: 400, y: 350 },
+                    { company: 'ADP', category: 'technology', x: 350, y: 250 },
+                    { company: 'Concur', category: 'finance', x: 450, y: 300 }
+                ];
+
+                examples.forEach(data => this.createCard(data));
+                this.render();
+                
+                setTimeout(() => {
+                    this.showNotification('Welcome! Click cards to select, or add your own companies.', 'info');
+                }, 1000);
+            }
+
+            populateWithCompanies() {
+                const companies = [
+                    'BambooHR', 'Zenefits', 'Justworks', 'TriNet', 'Paychex',
+                    'QuickBooks', 'FreshBooks', 'Wave', 'Xero', 'Sage',
+                    'Ramp', 'Brex', 'Divvy', 'Pleo', 'Mercury'
+                ];
+
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const radius = 150;
+
+                companies.forEach((company, i) => {
+                    const angle = (i / companies.length) * 2 * Math.PI;
+                    const x = centerX + Math.cos(angle) * radius;
+                    const y = centerY + Math.sin(angle) * radius;
+                    
+                    this.createCard({
+                        company,
+                        category: i < 5 ? 'technology' : i < 10 ? 'finance' : 'other',
+                        x, y
+                    });
+                });
+
+                this.render();
+                this.showNotification(`Added ${companies.length} companies!`, 'success');
+            }
+
+            exportCanvas() {
+                const link = document.createElement('a');
+                link.download = 'business-cards.png';
+                link.href = this.canvas.toDataURL();
+                link.click();
+                this.showNotification('Canvas exported!', 'success');
+            }
+
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+
+                setTimeout(() => notification.remove(), 3000);
+            }
+        }
+
+        // Global functions for onclick handlers
+        let app;
+
+        function openAddCardModal() {
+            document.getElementById('addCardModal').classList.add('show');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+        }
+
+        function addBusinessCard() {
+            const companyName = document.getElementById('companyName').value.trim();
+            const category = document.getElementById('cardCategory').value;
+
+            if (!companyName) {
+                app.showNotification('Please enter a company name', 'error');
+                return;
+            }
+
+            if (!app.clickPosition.x && !app.clickPosition.y) {
+                app.clickPosition = { x: 400, y: 300 }; // Default position
+            }
+
+            app.createCard({
+                company: companyName,
+                category,
+                x: app.clickPosition.x,
+                y: app.clickPosition.y
+            });
+
+            app.render();
+            closeModal('addCardModal');
+            app.showNotification(`Added ${companyName}!`, 'success');
+            
+            // Clear form
+            document.getElementById('companyName').value = '';
+        }
+
+        function populateCanvas() {
+            app.populateWithCompanies();
+        }
+
+        function exportCanvas() {
+            app.exportCanvas();
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new BusinessCardCanvas();
+            console.log('✅ Business Card Canvas ready');
+        });
     </script>
 </body>
 </html> 
