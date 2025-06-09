@@ -144,51 +144,39 @@ export class Canvas {
 
     this.ctx.save();
 
-    // Shadow
-    this.drawCardShadow(card, isSelected, isHovered);
+    // Shadow (light shadow for unselected, no shadow for selected)
+    if (!isSelected) {
+      this.drawCardShadow(card, isSelected, isHovered);
+    }
     
     // Background
     this.drawCardBackground(card, x, y, cardSize, borderRadius);
     
-    // Border
-    this.drawCardBorder(card, x, y, cardSize, borderRadius, isSelected, isHovered);
+    // Border (only if selected)
+    if (isSelected) {
+      this.drawCardBorder(card, x, y, cardSize, borderRadius, isSelected, isHovered);
+    }
     
     // Content
     this.drawCardContent(card, cardSize);
-    
-    // Category indicator
-    this.drawCategoryIndicator(card, x, y, cardSize);
 
     this.ctx.restore();
   }
 
   drawCardShadow(card, isSelected, isHovered) {
-    const shadowConfig = {
-      color: 'rgba(0, 0, 0, 0.4)',
-      blur: 25,
-      offset: 12
-    };
-    
-    let intensity = 1;
-    if (isSelected) intensity = 1.5;
-    else if (isHovered) intensity = 1.2;
-    
-    this.ctx.shadowColor = shadowConfig.color;
-    this.ctx.shadowBlur = shadowConfig.blur * intensity;
+    // Light subtle shadow for unselected cards only
+    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+    this.ctx.shadowBlur = 8;
     this.ctx.shadowOffsetX = 0;
-    this.ctx.shadowOffsetY = shadowConfig.offset * intensity;
+    this.ctx.shadowOffsetY = 2;
   }
 
   drawCardBackground(card, x, y, cardSize, borderRadius) {
     this.ctx.beginPath();
     this.roundRect(x, y, cardSize, cardSize, borderRadius);
     
-    // Executive theme gradient
-    const gradient = this.ctx.createLinearGradient(x, y, x + cardSize, y + cardSize);
-    gradient.addColorStop(0, '#1f2937');
-    gradient.addColorStop(1, '#111827');
-    
-    this.ctx.fillStyle = gradient;
+    // Clean white background
+    this.ctx.fillStyle = '#ffffff';
     this.ctx.fill();
     
     // Reset shadow
@@ -198,8 +186,9 @@ export class Canvas {
   }
 
   drawCardBorder(card, x, y, cardSize, borderRadius, isSelected, isHovered) {
-    this.ctx.strokeStyle = isSelected ? '#667eea' : (isHovered ? '#764ba2' : '#374151');
-    this.ctx.lineWidth = isSelected ? 3 : (isHovered ? 2.5 : 2);
+    // Only blue border for selected items, no padding
+    this.ctx.strokeStyle = '#3b82f6';
+    this.ctx.lineWidth = 2;
     
     this.ctx.beginPath();
     this.roundRect(x, y, cardSize, cardSize, borderRadius);
@@ -240,7 +229,7 @@ export class Canvas {
   }
 
   drawInitials(card, cardSize) {
-    this.ctx.fillStyle = '#ffffff';
+    this.ctx.fillStyle = '#1e293b';
     this.ctx.font = `bold ${Math.max(14, cardSize * 0.25)}px Inter, system-ui, sans-serif`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
@@ -366,25 +355,8 @@ export class Canvas {
   }
 
   drawSelectionIndicators() {
-    this.selectedCards.forEach(card => {
-      const { cardSize } = this.config;
-      const padding = Math.max(6, cardSize * 0.1);
-      const halfSize = cardSize / 2;
-      
-      this.ctx.strokeStyle = '#667eea';
-      this.ctx.lineWidth = 3;
-      this.ctx.setLineDash([8, 4]);
-      this.ctx.beginPath();
-      this.roundRect(
-        card.x - halfSize - padding,
-        card.y - halfSize - padding,
-        cardSize + padding * 2,
-        cardSize + padding * 2,
-        8
-      );
-      this.ctx.stroke();
-      this.ctx.setLineDash([]);
-    });
+    // Selection is now handled directly in drawCard() method
+    // No additional selection indicators needed
   }
 
   // Event emitter functionality
