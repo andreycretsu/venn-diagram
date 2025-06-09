@@ -192,58 +192,7 @@
         .notification.error { border-left: 4px solid #ef4444; }
         .notification.info { border-left: 4px solid var(--color-primary); }
 
-        .controls-panel {
-            position: fixed;
-            top: var(--space-lg);
-            left: var(--space-lg);
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-md);
-            z-index: 1000;
-            min-width: 220px;
-            transition: all 0.3s ease;
-        }
-
-        .controls-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: var(--space-md);
-            border-bottom: 1px solid var(--color-border);
-        }
-
-        .controls-header h3 {
-            font-size: 14px;
-            font-weight: 600;
-            margin: 0;
-        }
-
-        .controls-toggle {
-            background: none;
-            border: none;
-            font-size: 12px;
-            cursor: pointer;
-            color: var(--color-text-primary);
-            padding: 4px;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .controls-toggle:hover {
-            background: var(--color-border);
-        }
-
-        .controls-content {
-            padding: var(--space-md);
-            transition: all 0.3s ease;
-            overflow: hidden;
-        }
-
-        .controls-content.collapsed {
-            max-height: 0;
-            padding: 0 var(--space-md);
-        }
+        .floating-button.controls { background: #8b5cf6; }
 
         .control-group {
             margin-bottom: var(--space-md);
@@ -255,10 +204,14 @@
 
         .control-label {
             display: block;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             margin-bottom: 6px;
             color: var(--color-text-primary);
+        }
+
+        .control-label input[type="checkbox"] {
+            margin-right: 8px;
         }
 
         .control-slider {
@@ -301,22 +254,32 @@
             <canvas id="canvas"></canvas>
         </div>
 
-        <!-- Circle Controls Panel -->
-        <div class="controls-panel" id="controlsPanel">
-            <div class="controls-header">
-                <h3>Circle Controls</h3>
-                <button class="controls-toggle" onclick="toggleControlsPanel()">
-                    <i class="fas fa-chevron-up" id="controlsIcon"></i>
-                </button>
-            </div>
-            <div class="controls-content" id="controlsContent">
+        <!-- Circle Controls Modal -->
+        <div class="modal" id="controlsModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title">Circle Controls</h2>
+                    <button class="modal-close" onclick="closeModal('controlsModal')">×</button>
+                </div>
+                
                 <div class="control-group">
                     <label class="control-label">Radius: <span id="radiusValue">120</span>px</label>
-                    <input type="range" id="radiusSlider" min="50" max="200" value="120" class="control-slider">
+                    <input type="range" id="radiusSlider" min="50" max="500" value="120" class="control-slider">
                 </div>
+                
                 <div class="control-group">
                     <label class="control-label">Distance: <span id="distanceValue">100</span>px</label>
                     <input type="range" id="distanceSlider" min="50" max="150" value="100" class="control-slider">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        <input type="checkbox" id="showCirclesCheckbox" checked> Show Circles
+                    </label>
+                </div>
+                
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="closeModal('controlsModal')">Done</button>
                 </div>
             </div>
         </div>
@@ -325,8 +288,8 @@
             <button class="floating-button" onclick="openAddCardModal()" title="Add Card">
                 <i class="fas fa-plus"></i>
             </button>
-            <button class="floating-button" onclick="toggleCircles()" title="Toggle Circles" id="circlesToggle">
-                <i class="fas fa-circle-dot"></i>
+            <button class="floating-button" onclick="toggleControlsModal()" title="Circle Controls" id="controlsFab">
+                <i class="fas fa-sliders-h"></i>
             </button>
             <button class="floating-button" onclick="populateCanvas()" title="Populate">
                 <i class="fas fa-magic"></i>
@@ -815,59 +778,24 @@
             app.exportCanvas();
         }
 
-        function toggleCircles() {
-            app.showCircles = !app.showCircles;
-            app.render();
-            
-            const button = document.getElementById('circlesToggle');
-            const icon = button.querySelector('i');
-            
-            if (app.showCircles) {
-                button.className = 'floating-button active';
-                icon.className = 'fas fa-circle-dot';
-                button.title = 'Hide Circles';
-            } else {
-                button.className = 'floating-button inactive';
-                icon.className = 'fas fa-circle';
-                button.title = 'Show Circles';
-            }
-            
-            app.showNotification(
-                app.showCircles ? 'Circles shown' : 'Circles hidden', 
-                'info'
-            );
-        }
-
-        function toggleControlsPanel() {
-            const content = document.getElementById('controlsContent');
-            const icon = document.getElementById('controlsIcon');
-            
-            if (content.classList.contains('collapsed')) {
-                content.classList.remove('collapsed');
-                icon.className = 'fas fa-chevron-up';
-            } else {
-                content.classList.add('collapsed');
-                icon.className = 'fas fa-chevron-down';
-            }
+        function toggleControlsModal() {
+            document.getElementById('controlsModal').classList.add('show');
         }
 
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             app = new BusinessCardCanvas();
             
-            // Initialize circles toggle button state
-            const button = document.getElementById('circlesToggle');
-            if (app.showCircles) {
-                button.className = 'floating-button active';
-                button.querySelector('i').className = 'fas fa-circle-dot';
-                button.title = 'Hide Circles';
-            }
+            // Style the controls FAB
+            const controlsFab = document.getElementById('controlsFab');
+            controlsFab.className = 'floating-button controls';
             
-            // Setup control sliders
+            // Setup control sliders and checkbox
             const radiusSlider = document.getElementById('radiusSlider');
             const distanceSlider = document.getElementById('distanceSlider');
             const radiusValue = document.getElementById('radiusValue');
             const distanceValue = document.getElementById('distanceValue');
+            const showCirclesCheckbox = document.getElementById('showCirclesCheckbox');
             
             radiusSlider.addEventListener('input', (e) => {
                 app.circleRadius = parseInt(e.target.value);
@@ -879,6 +807,15 @@
                 app.centerDistance = parseInt(e.target.value);
                 distanceValue.textContent = e.target.value;
                 app.render();
+            });
+            
+            showCirclesCheckbox.addEventListener('change', (e) => {
+                app.showCircles = e.target.checked;
+                app.render();
+                app.showNotification(
+                    app.showCircles ? 'Circles shown' : 'Circles hidden', 
+                    'info'
+                );
             });
             
             console.log('✅ Business Card Canvas ready with vector rendering');
