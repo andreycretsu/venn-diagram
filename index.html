@@ -769,7 +769,8 @@
             drawCircles() {
                 const rect = this.canvas.getBoundingClientRect();
                 const centerX = rect.width / 2;
-                const centerY = rect.height / 2;
+                // Move circles higher - use 40% from top instead of center
+                const centerY = rect.height * 0.4;
                 const radius = this.circleRadius;
                 const offset = this.centerDistance;
 
@@ -919,12 +920,18 @@
             }
 
             loadExampleCompanies() {
+                // Position example cards within the repositioned circles
+                const rect = this.canvas.getBoundingClientRect();
+                const centerX = rect.width / 2;
+                const centerY = rect.height * 0.4;
+                const offset = this.centerDistance;
+                
                 const examples = [
-                    { company: 'Workday', category: 'technology', x: 300, y: 200 },
-                    { company: 'Gusto', category: 'technology', x: 500, y: 200 },
-                    { company: 'Expensify', category: 'finance', x: 400, y: 350 },
-                    { company: 'ADP', category: 'technology', x: 350, y: 250 },
-                    { company: 'Concur', category: 'finance', x: 450, y: 300 }
+                    { company: 'Workday', category: 'technology', x: centerX - offset, y: centerY - offset/3 },
+                    { company: 'Gusto', category: 'technology', x: centerX + offset, y: centerY - offset/3 },
+                    { company: 'Expensify', category: 'finance', x: centerX, y: centerY + offset/2 },
+                    { company: 'ADP', category: 'technology', x: centerX - offset/2, y: centerY },
+                    { company: 'Concur', category: 'finance', x: centerX + offset/2, y: centerY + offset/4 }
                 ];
 
                 examples.forEach(data => this.createCard(data));
@@ -942,8 +949,9 @@
                     'Ramp', 'Brex', 'Divvy', 'Pleo', 'Mercury'
                 ];
 
-                const centerX = this.canvas.width / 2;
-                const centerY = this.canvas.height / 2;
+                const rect = this.canvas.getBoundingClientRect();
+                const centerX = rect.width / 2;
+                const centerY = rect.height * 0.4;
                 const radius = 150;
 
                 companies.forEach((company, i) => {
