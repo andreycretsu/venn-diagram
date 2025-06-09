@@ -191,12 +191,134 @@
         .notification.success { border-left: 4px solid #10b981; }
         .notification.error { border-left: 4px solid #ef4444; }
         .notification.info { border-left: 4px solid var(--color-primary); }
+
+        .controls-panel {
+            position: fixed;
+            top: var(--space-lg);
+            left: var(--space-lg);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            z-index: 1000;
+            min-width: 220px;
+            transition: all 0.3s ease;
+        }
+
+        .controls-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .controls-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .controls-toggle {
+            background: none;
+            border: none;
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--color-text-primary);
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .controls-toggle:hover {
+            background: var(--color-border);
+        }
+
+        .controls-content {
+            padding: var(--space-md);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .controls-content.collapsed {
+            max-height: 0;
+            padding: 0 var(--space-md);
+        }
+
+        .control-group {
+            margin-bottom: var(--space-md);
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--color-text-primary);
+        }
+
+        .control-slider {
+            width: 100%;
+            height: 4px;
+            background: var(--color-border);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .control-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .control-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: var(--color-primary);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
     </style>
 </head>
 <body>
     <div class="app">
         <div class="canvas-container">
             <canvas id="canvas"></canvas>
+        </div>
+
+        <!-- Circle Controls Panel -->
+        <div class="controls-panel" id="controlsPanel">
+            <div class="controls-header">
+                <h3>Circle Controls</h3>
+                <button class="controls-toggle" onclick="toggleControlsPanel()">
+                    <i class="fas fa-chevron-up" id="controlsIcon"></i>
+                </button>
+            </div>
+            <div class="controls-content" id="controlsContent">
+                <div class="control-group">
+                    <label class="control-label">Radius: <span id="radiusValue">120</span>px</label>
+                    <input type="range" id="radiusSlider" min="50" max="200" value="120" class="control-slider">
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Distance: <span id="distanceValue">100</span>px</label>
+                    <input type="range" id="distanceSlider" min="50" max="150" value="100" class="control-slider">
+                </div>
+            </div>
         </div>
 
         <div class="floating-controls">
@@ -262,6 +384,10 @@
                 this.dragStartPos = null;
                 this.hoveredCard = null;
                 
+                // Circle controls
+                this.circleRadius = 120;
+                this.centerDistance = 100;
+                
                 this.init();
             }
 
@@ -274,8 +400,24 @@
 
             resizeCanvas() {
                 const rect = this.canvas.getBoundingClientRect();
-                this.canvas.width = rect.width;
-                this.canvas.height = rect.height;
+                const dpr = window.devicePixelRatio || 1;
+                
+                // Set actual canvas size for crisp vector rendering
+                this.canvas.width = rect.width * dpr;
+                this.canvas.height = rect.height * dpr;
+                
+                // Scale canvas back down using CSS
+                this.canvas.style.width = rect.width + 'px';
+                this.canvas.style.height = rect.height + 'px';
+                
+                // Scale the drawing context so everything draws at correct size
+                this.ctx.scale(dpr, dpr);
+                
+                // Enable crisp text and shape rendering
+                this.ctx.textRenderingOptimization = 'optimizeQuality';
+                this.ctx.imageSmoothingEnabled = true;
+                this.ctx.imageSmoothingQuality = 'high';
+                
                 this.render();
             }
 
@@ -425,10 +567,11 @@
             }
 
             drawCircles() {
-                const centerX = this.canvas.width / 2;
-                const centerY = this.canvas.height / 2;
-                const radius = Math.min(this.canvas.width, this.canvas.height) / 4;
-                const offset = radius * 0.6;
+                const rect = this.canvas.getBoundingClientRect();
+                const centerX = rect.width / 2;
+                const centerY = rect.height / 2;
+                const radius = this.circleRadius;
+                const offset = this.centerDistance;
 
                 const circles = [
                     { x: centerX - offset, y: centerY - offset/2, label: 'HRIS', color: 'rgba(59, 130, 246, 0.1)' },
@@ -477,7 +620,11 @@
                     
                     this.ctx.textAlign = textAlign;
                     this.ctx.textBaseline = textBaseline;
-                    this.ctx.fillText(circle.label, labelX, labelY);
+                    
+                    // Pixel-perfect label positioning
+                    const pixelX = Math.round(labelX);
+                    const pixelY = Math.round(labelY);
+                    this.ctx.fillText(circle.label, pixelX, pixelY);
                 });
             }
 
@@ -527,7 +674,7 @@
                     this.ctx.stroke();
                 }
 
-                // Company initials
+                // Company initials - crisp text rendering
                 this.ctx.fillStyle = '#1e293b';
                 this.ctx.font = `bold ${Math.max(14, this.cardSize * 0.25)}px Inter, sans-serif`;
                 this.ctx.textAlign = 'center';
@@ -540,7 +687,10 @@
                     .map(word => word[0].toUpperCase())
                     .join('');
                 
-                this.ctx.fillText(initials, card.x, card.y);
+                // Ensure pixel-perfect text positioning
+                const textX = Math.round(card.x);
+                const textY = Math.round(card.y);
+                this.ctx.fillText(initials, textX, textY);
                 this.ctx.restore();
             }
 
@@ -688,6 +838,19 @@
             );
         }
 
+        function toggleControlsPanel() {
+            const content = document.getElementById('controlsContent');
+            const icon = document.getElementById('controlsIcon');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                icon.className = 'fas fa-chevron-up';
+            } else {
+                content.classList.add('collapsed');
+                icon.className = 'fas fa-chevron-down';
+            }
+        }
+
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             app = new BusinessCardCanvas();
@@ -700,7 +863,25 @@
                 button.title = 'Hide Circles';
             }
             
-            console.log('✅ Business Card Canvas ready');
+            // Setup control sliders
+            const radiusSlider = document.getElementById('radiusSlider');
+            const distanceSlider = document.getElementById('distanceSlider');
+            const radiusValue = document.getElementById('radiusValue');
+            const distanceValue = document.getElementById('distanceValue');
+            
+            radiusSlider.addEventListener('input', (e) => {
+                app.circleRadius = parseInt(e.target.value);
+                radiusValue.textContent = e.target.value;
+                app.render();
+            });
+            
+            distanceSlider.addEventListener('input', (e) => {
+                app.centerDistance = parseInt(e.target.value);
+                distanceValue.textContent = e.target.value;
+                app.render();
+            });
+            
+            console.log('✅ Business Card Canvas ready with vector rendering');
         });
     </script>
 </body>
