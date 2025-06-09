@@ -513,6 +513,10 @@
             }
 
             init() {
+                // Clear any old localStorage data to start fresh
+                localStorage.removeItem('venn-canvas-local');
+                console.log('🧹 Cleared localStorage - starting with clean canvas');
+                
                 this.initSupabase();
                 this.resizeCanvas();
                 this.setupEventListeners();
@@ -601,23 +605,41 @@
                     }
 
                     if (data) {
-                        this.cards = data.cards || [];
-                        if (data.settings) {
-                            this.circleRadius = data.settings.circleRadius || 200;
-                            this.centerDistance = data.settings.centerDistance || 200;
-                            this.cardSize = data.settings.cardSize || 80;
-                            this.showCircles = data.settings.showCircles !== false;
-                        }
-                        console.log('✅ Loaded from Supabase:', this.cards.length, 'cards');
+                        // Force clear any old pre-populated data
+                        console.log('🧹 Clearing old Supabase data and starting fresh...');
+                        await this.clearSupabaseData();
+                        this.cards = [];
+                        console.log('✅ Supabase data cleared - clean canvas ready');
                     }
 
-                    // Start with clean canvas if no cards exist
-                    if (this.cards.length === 0) {
-                        this.initializeCleanCanvas();
-                    }
+                    // Always start with clean canvas
+                    this.initializeCleanCanvas();
                 } catch (error) {
                     console.error('❌ Error loading from Supabase:', error.message);
                     this.initializeCleanCanvas();
+                }
+            }
+
+            async clearSupabaseData() {
+                try {
+                    const { error } = await this.supabase
+                        .from('canvas_data')
+                        .update({
+                            cards: [],
+                            settings: {
+                                circleRadius: 200,
+                                centerDistance: 200,
+                                cardSize: 80,
+                                showCircles: true
+                            },
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', 'shared-canvas');
+
+                    if (error) throw error;
+                    console.log('✅ Cleared Supabase data successfully');
+                } catch (error) {
+                    console.error('❌ Failed to clear Supabase data:', error.message);
                 }
             }
 
@@ -635,13 +657,20 @@
                         updated_at: new Date().toISOString()
                     };
 
+                    // First try to clear any existing data
+                    await this.supabase
+                        .from('canvas_data')
+                        .delete()
+                        .eq('id', 'shared-canvas');
+
+                    // Then insert fresh empty data
                     const { error } = await this.supabase
                         .from('canvas_data')
                         .insert(initialData);
 
                     if (error) throw error;
                     
-                    console.log('✅ Created initial Supabase record');
+                    console.log('✅ Created fresh empty Supabase record');
                     this.initializeCleanCanvas();
                 } catch (error) {
                     console.error('❌ Failed to create initial record:', error.message);
