@@ -709,19 +709,21 @@
             }
 
             handleRealtimeUpdate(data) {
-                // Only update if we're not currently dragging to prevent jumping
-                if (!this.isDragging) {
-                    this.cards = data.cards || [];
-                    if (data.settings) {
-                        this.circleRadius = data.settings.circleRadius || 200;
-                        this.centerDistance = data.settings.centerDistance || 200;
-                        this.cardSize = data.settings.cardSize || 80;
-                        this.showCircles = data.settings.showCircles !== false;
-                        this.updateControlsUI();
-                    }
-                    this.render();
+                console.log('📡 INSTANT UPDATE received from another device!', {
+                    cards: data.cards?.length || 0,
+                    isDragging: this.isDragging
+                });
+                
+                // Update immediately for instant sync
+                this.cards = data.cards || [];
+                if (data.settings) {
+                    this.circleRadius = data.settings.circleRadius || 200;
+                    this.centerDistance = data.settings.centerDistance || 200;
+                    this.cardSize = data.settings.cardSize || 80;
+                    this.showCircles = data.settings.showCircles !== false;
+                    this.updateControlsUI();
                 }
-                // No notification for every update - too annoying!
+                this.render();
             }
 
             async saveToSupabase() {
@@ -860,13 +862,8 @@
                             this.dragStartPos = mousePos;
                             this.render();
                             
-                            // Debounce saving during drag to prevent jumping
-                            clearTimeout(this.dragSaveTimeout);
-                            this.dragSaveTimeout = setTimeout(() => {
-                                if (!this.isDragging) {
-                                    this.saveToSupabase();
-                                }
-                            }, 100);
+                            // INSTANT sync - no debouncing, save immediately
+                            this.saveToSupabase();
                         }
                     } else {
                         // Check hover state
@@ -918,11 +915,6 @@
 
                 // Mouse up to end dragging
                 this.canvas.addEventListener('mouseup', (e) => {
-                    if (this.isDragging) {
-                        // Save immediately when dragging ends
-                        this.saveToSupabase();
-                    }
-                    
                     this.isDragging = false;
                     this.dragStartPos = null;
                     
@@ -1184,6 +1176,40 @@
                 this.render();
             }
 
+            async ensureLogosStorage() {
+                try {
+                    // Check if logos bucket exists
+                    const { data: buckets, error: listError } = await this.supabase.storage.listBuckets();
+                    
+                    if (listError) {
+                        console.error('❌ Could not list buckets:', listError);
+                        return;
+                    }
+
+                    const logosBucket = buckets.find(bucket => bucket.name === 'logos');
+                    
+                    if (!logosBucket) {
+                        console.log('📁 Creating logos storage bucket...');
+                        
+                        // Create the bucket
+                        const { data, error } = await this.supabase.storage.createBucket('logos', {
+                            public: true,
+                            allowedMimeTypes: ['image/svg+xml', 'image/png'],
+                            fileSizeLimit: 10485760 // 10MB
+                        });
+
+                        if (error) {
+                            console.error('❌ Failed to create logos bucket:', error);
+                            return;
+                        }
+                        
+                        console.log('✅ Logos storage bucket created successfully');
+                    }
+                } catch (error) {
+                    console.error('❌ Error setting up storage:', error);
+                }
+            }
+
             async uploadLogoToStorage(file) {
                 if (!this.supabase || !this.isConnected) {
                     console.log('📁 No Supabase connection - using data URL fallback');
@@ -1191,6 +1217,9 @@
                 }
 
                 try {
+                    // Ensure logos bucket exists
+                    await this.ensureLogosStorage();
+
                     // Generate unique filename
                     const timestamp = Date.now();
                     const randomId = Math.random().toString(36).substring(2, 15);
@@ -1199,17 +1228,23 @@
 
                     console.log('📤 Uploading logo to Supabase Storage...', fileName);
 
-                    // Upload to Supabase Storage
+                    // Upload to Supabase Storage with proper headers for SVG
+                    const uploadOptions = {
+                        cacheControl: '3600',
+                        upsert: false
+                    };
+
+                    if (file.type.includes('svg')) {
+                        uploadOptions.contentType = 'image/svg+xml';
+                    }
+
                     const { data, error } = await this.supabase.storage
                         .from('logos')
-                        .upload(fileName, file, {
-                            cacheControl: '3600',
-                            upsert: false
-                        });
+                        .upload(fileName, file, uploadOptions);
 
                     if (error) {
                         console.error('❌ Storage upload error:', error);
-                        return null;
+                        throw error;
                     }
 
                     // Get public URL
@@ -1217,6 +1252,7 @@
                         .from('logos')
                         .getPublicUrl(fileName);
 
+                    console.log('✅ Logo uploaded successfully:', urlData.publicUrl);
                     return urlData.publicUrl;
 
                 } catch (error) {
@@ -1232,6 +1268,9 @@
                 }
 
                 try {
+                    // Ensure logos bucket exists
+                    await this.ensureLogosStorage();
+
                     // Generate unique filename
                     const timestamp = Date.now();
                     const randomId = Math.random().toString(36).substring(2, 15);
@@ -1239,7 +1278,7 @@
 
                     console.log('📤 Uploading SVG code to Supabase Storage...', fileName);
 
-                    // Create blob from SVG code
+                    // Create blob from SVG code with proper MIME type
                     const blob = new Blob([svgCode], { type: 'image/svg+xml' });
 
                     // Upload to Supabase Storage
@@ -1247,12 +1286,13 @@
                         .from('logos')
                         .upload(fileName, blob, {
                             cacheControl: '3600',
-                            upsert: false
+                            upsert: false,
+                            contentType: 'image/svg+xml'
                         });
 
                     if (error) {
                         console.error('❌ Storage upload error:', error);
-                        return null;
+                        throw error;
                     }
 
                     // Get public URL
@@ -1260,6 +1300,7 @@
                         .from('logos')
                         .getPublicUrl(fileName);
 
+                    console.log('✅ SVG uploaded successfully:', urlData.publicUrl);
                     return urlData.publicUrl;
 
                 } catch (error) {
