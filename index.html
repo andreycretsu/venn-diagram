@@ -7,6 +7,8 @@
     <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <style>
         :root {
             --color-background: #ffffff;
@@ -194,6 +196,32 @@
 
         .floating-button.controls { background: #8b5cf6; }
 
+        .collaboration-status {
+            position: fixed;
+            top: var(--space-lg);
+            right: var(--space-lg);
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: 8px 12px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 1000;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+
+        .status-indicator.disconnected {
+            background: #ef4444;
+        }
+
         .control-group {
             margin-bottom: var(--space-md);
         }
@@ -263,13 +291,18 @@
                 </div>
                 
                 <div class="control-group">
-                    <label class="control-label">Radius: <span id="radiusValue">120</span>px</label>
-                    <input type="range" id="radiusSlider" min="50" max="500" value="120" class="control-slider">
+                    <label class="control-label">Circle Radius: <span id="radiusValue">200</span>px</label>
+                    <input type="range" id="radiusSlider" min="50" max="500" value="200" class="control-slider">
                 </div>
                 
                 <div class="control-group">
-                    <label class="control-label">Distance: <span id="distanceValue">100</span>px</label>
-                    <input type="range" id="distanceSlider" min="50" max="150" value="100" class="control-slider">
+                    <label class="control-label">Circle Distance: <span id="distanceValue">200</span>px</label>
+                    <input type="range" id="distanceSlider" min="50" max="300" value="200" class="control-slider">
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">Card Size: <span id="cardSizeValue">80</span>px</label>
+                    <input type="range" id="cardSizeSlider" min="40" max="120" value="80" class="control-slider">
                 </div>
                 
                 <div class="control-group">
@@ -282,6 +315,12 @@
                     <button class="btn btn-primary" onclick="closeModal('controlsModal')">Done</button>
                 </div>
             </div>
+        </div>
+
+        <!-- Collaboration Status -->
+        <div class="collaboration-status">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span id="statusText">Connecting...</span>
         </div>
 
         <div class="floating-controls">
@@ -314,6 +353,11 @@
             </div>
             
             <div class="form-group">
+                <label class="form-label">Logo URL (SVG or PNG)</label>
+                <input type="url" id="companyLogo" class="form-input" placeholder="https://example.com/logo.svg">
+            </div>
+            
+            <div class="form-group">
                 <label class="form-label">Category</label>
                 <select id="cardCategory" class="form-select">
                     <option value="technology">Technology</option>
@@ -333,7 +377,15 @@
     </div>
 
     <script>
-        // Single consolidated script - no modules, no imports, no process issues
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBJ8Q4_demo_key_for_collaboration",
+            authDomain: "venn-canvas-demo.firebaseapp.com",
+            databaseURL: "https://venn-canvas-demo-default-rtdb.firebaseio.com",
+            projectId: "venn-canvas-demo"
+        };
+
+        // Single consolidated script with collaboration and autosave
         class BusinessCardCanvas {
             constructor() {
                 this.canvas = document.getElementById('canvas');
@@ -342,23 +394,179 @@
                 this.selectedCards = [];
                 this.clickPosition = { x: 0, y: 0 };
                 this.showCircles = true;
-                this.cardSize = 80;
                 this.isDragging = false;
                 this.dragStartPos = null;
                 this.hoveredCard = null;
+                this.loadedLogos = new Map(); // Cache for loaded images
                 
-                // Circle controls
-                this.circleRadius = 120;
-                this.centerDistance = 100;
+                // Circle controls - new defaults
+                this.circleRadius = 200;
+                this.centerDistance = 200;
+                this.cardSize = 80;
+                
+                // Collaboration
+                this.sessionId = this.generateSessionId();
+                this.userId = this.generateUserId();
+                this.database = null;
+                this.isConnected = false;
                 
                 this.init();
             }
 
             init() {
+                this.initFirebase();
+                this.loadFromStorage();
                 this.resizeCanvas();
                 this.setupEventListeners();
-                this.loadExampleCompanies();
+                this.setupAutosave();
                 window.addEventListener('resize', () => this.resizeCanvas());
+                
+                // Load examples only if no saved data
+                if (this.cards.length === 0) {
+                    this.loadExampleCompanies();
+                }
+            }
+
+            generateSessionId() {
+                return Math.random().toString(36).substr(2, 9);
+            }
+
+            generateUserId() {
+                return 'user_' + Math.random().toString(36).substr(2, 9);
+            }
+
+            async initFirebase() {
+                try {
+                    if (typeof firebase !== 'undefined') {
+                        firebase.initializeApp(firebaseConfig);
+                        this.database = firebase.database();
+                        this.setupCollaboration();
+                        this.updateStatus('connected', 'Collaborative');
+                    } else {
+                        this.updateStatus('disconnected', 'Local Only');
+                    }
+                } catch (error) {
+                    console.log('Firebase not available, using local mode');
+                    this.updateStatus('disconnected', 'Local Only');
+                }
+            }
+
+            updateStatus(status, text) {
+                const indicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                
+                indicator.className = `status-indicator ${status === 'disconnected' ? 'disconnected' : ''}`;
+                statusText.textContent = text;
+                this.isConnected = status === 'connected';
+            }
+
+            setupCollaboration() {
+                if (!this.database) return;
+
+                const sessionRef = this.database.ref(`sessions/${this.sessionId}`);
+                
+                // Listen for changes from other users
+                sessionRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data && data.lastUpdatedBy !== this.userId) {
+                        this.loadDataFromSnapshot(data);
+                    }
+                });
+
+                // Set user presence
+                const userRef = sessionRef.child(`users/${this.userId}`);
+                userRef.set({
+                    online: true,
+                    lastSeen: firebase.database.ServerValue.TIMESTAMP
+                });
+
+                // Clean up on disconnect
+                userRef.onDisconnect().set({
+                    online: false,
+                    lastSeen: firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+
+            loadDataFromSnapshot(data) {
+                if (data.cards) {
+                    this.cards = data.cards;
+                }
+                if (data.settings) {
+                    this.circleRadius = data.settings.circleRadius || 200;
+                    this.centerDistance = data.settings.centerDistance || 200;
+                    this.cardSize = data.settings.cardSize || 80;
+                    this.showCircles = data.settings.showCircles !== false;
+                    this.updateControlsUI();
+                }
+                this.render();
+            }
+
+            saveToCollaboration() {
+                if (!this.database || !this.isConnected) return;
+
+                const sessionRef = this.database.ref(`sessions/${this.sessionId}`);
+                sessionRef.update({
+                    cards: this.cards,
+                    settings: {
+                        circleRadius: this.circleRadius,
+                        centerDistance: this.centerDistance,
+                        cardSize: this.cardSize,
+                        showCircles: this.showCircles
+                    },
+                    lastUpdatedBy: this.userId,
+                    lastUpdated: firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+
+            setupAutosave() {
+                // Auto-save every 2 seconds
+                setInterval(() => {
+                    this.saveToStorage();
+                    this.saveToCollaboration();
+                }, 2000);
+            }
+
+            saveToStorage() {
+                const data = {
+                    cards: this.cards,
+                    settings: {
+                        circleRadius: this.circleRadius,
+                        centerDistance: this.centerDistance,
+                        cardSize: this.cardSize,
+                        showCircles: this.showCircles
+                    },
+                    sessionId: this.sessionId
+                };
+                localStorage.setItem('venn-canvas-data', JSON.stringify(data));
+            }
+
+            loadFromStorage() {
+                try {
+                    const saved = localStorage.getItem('venn-canvas-data');
+                    if (saved) {
+                        const data = JSON.parse(saved);
+                        this.cards = data.cards || [];
+                        if (data.settings) {
+                            this.circleRadius = data.settings.circleRadius || 200;
+                            this.centerDistance = data.settings.centerDistance || 200;
+                            this.cardSize = data.settings.cardSize || 80;
+                            this.showCircles = data.settings.showCircles !== false;
+                        }
+                        this.sessionId = data.sessionId || this.generateSessionId();
+                    }
+                } catch (error) {
+                    console.log('Error loading saved data:', error);
+                }
+            }
+
+            updateControlsUI() {
+                document.getElementById('radiusSlider').value = this.circleRadius;
+                document.getElementById('radiusValue').textContent = this.circleRadius;
+                document.getElementById('distanceSlider').value = this.centerDistance;
+                document.getElementById('distanceValue').textContent = this.centerDistance;
+                document.getElementById('cardSizeSlider').value = this.cardSize;
+                document.getElementById('cardSizeValue').textContent = this.cardSize;
+                document.getElementById('showCirclesCheckbox').checked = this.showCircles;
             }
 
             resizeCanvas() {
@@ -505,12 +713,41 @@
                 const card = {
                     id: Date.now() + Math.random(),
                     company: data.company,
+                    logo: data.logo || '',
                     category: data.category || 'technology',
                     x: data.x,
                     y: data.y
                 };
                 this.cards.push(card);
+                
+                // Pre-load logo if provided
+                if (card.logo) {
+                    this.loadLogo(card.logo);
+                }
+                
                 return card;
+            }
+
+            async loadLogo(logoUrl) {
+                if (this.loadedLogos.has(logoUrl)) return this.loadedLogos.get(logoUrl);
+
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    
+                    img.onload = () => {
+                        this.loadedLogos.set(logoUrl, img);
+                        this.render(); // Re-render when logo loads
+                        resolve(img);
+                    };
+                    
+                    img.onerror = () => {
+                        console.log('Failed to load logo:', logoUrl);
+                        resolve(null);
+                    };
+                    
+                    img.src = logoUrl;
+                });
             }
 
             render() {
@@ -637,23 +874,35 @@
                     this.ctx.stroke();
                 }
 
-                // Company initials - crisp text rendering
-                this.ctx.fillStyle = '#1e293b';
-                this.ctx.font = `bold ${Math.max(14, this.cardSize * 0.25)}px Inter, sans-serif`;
-                this.ctx.textAlign = 'center';
-                this.ctx.textBaseline = 'middle';
+                // Draw logo if available, otherwise show initials
+                const logo = this.loadedLogos.get(card.logo);
+                if (logo && card.logo) {
+                    // Draw logo centered in card
+                    const logoSize = this.cardSize * 0.6;
+                    const logoX = card.x - logoSize / 2;
+                    const logoY = card.y - logoSize / 2;
+                    
+                    this.ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+                } else {
+                    // Company initials - crisp text rendering
+                    this.ctx.fillStyle = '#1e293b';
+                    this.ctx.font = `bold ${Math.max(14, this.cardSize * 0.25)}px Inter, sans-serif`;
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    
+                    const initials = card.company
+                        .split(' ')
+                        .filter(word => word.length > 0)
+                        .slice(0, 2)
+                        .map(word => word[0].toUpperCase())
+                        .join('');
+                    
+                    // Ensure pixel-perfect text positioning
+                    const textX = Math.round(card.x);
+                    const textY = Math.round(card.y);
+                    this.ctx.fillText(initials, textX, textY);
+                }
                 
-                const initials = card.company
-                    .split(' ')
-                    .filter(word => word.length > 0)
-                    .slice(0, 2)
-                    .map(word => word[0].toUpperCase())
-                    .join('');
-                
-                // Ensure pixel-perfect text positioning
-                const textX = Math.round(card.x);
-                const textY = Math.round(card.y);
-                this.ctx.fillText(initials, textX, textY);
                 this.ctx.restore();
             }
 
@@ -682,7 +931,7 @@
                 this.render();
                 
                 setTimeout(() => {
-                    this.showNotification('Welcome! Drag cards around, hold Shift to select multiple cards.', 'info');
+                    this.showNotification('Welcome! Auto-saving enabled. Add logos, drag cards, use controls to customize.', 'info');
                 }, 1000);
             }
 
@@ -744,6 +993,7 @@
 
         function addBusinessCard() {
             const companyName = document.getElementById('companyName').value.trim();
+            const companyLogo = document.getElementById('companyLogo').value.trim();
             const category = document.getElementById('cardCategory').value;
 
             if (!companyName) {
@@ -757,6 +1007,7 @@
 
             app.createCard({
                 company: companyName,
+                logo: companyLogo,
                 category,
                 x: app.clickPosition.x,
                 y: app.clickPosition.y
@@ -768,6 +1019,7 @@
             
             // Clear form
             document.getElementById('companyName').value = '';
+            document.getElementById('companyLogo').value = '';
         }
 
         function populateCanvas() {
@@ -793,9 +1045,14 @@
             // Setup control sliders and checkbox
             const radiusSlider = document.getElementById('radiusSlider');
             const distanceSlider = document.getElementById('distanceSlider');
+            const cardSizeSlider = document.getElementById('cardSizeSlider');
             const radiusValue = document.getElementById('radiusValue');
             const distanceValue = document.getElementById('distanceValue');
+            const cardSizeValue = document.getElementById('cardSizeValue');
             const showCirclesCheckbox = document.getElementById('showCirclesCheckbox');
+            
+            // Update UI with loaded values
+            app.updateControlsUI();
             
             radiusSlider.addEventListener('input', (e) => {
                 app.circleRadius = parseInt(e.target.value);
@@ -806,6 +1063,12 @@
             distanceSlider.addEventListener('input', (e) => {
                 app.centerDistance = parseInt(e.target.value);
                 distanceValue.textContent = e.target.value;
+                app.render();
+            });
+            
+            cardSizeSlider.addEventListener('input', (e) => {
+                app.cardSize = parseInt(e.target.value);
+                cardSizeValue.textContent = e.target.value;
                 app.render();
             });
             
