@@ -48,7 +48,7 @@
             width: 100%;
             height: 100%;
             background: var(--color-background);
-            cursor: crosshair;
+            cursor: default;
         }
 
         .floating-controls {
@@ -258,6 +258,9 @@
                 this.clickPosition = { x: 0, y: 0 };
                 this.showCircles = true;
                 this.cardSize = 80;
+                this.isDragging = false;
+                this.dragStartPos = null;
+                this.hoveredCard = null;
                 
                 this.init();
             }
@@ -277,7 +280,50 @@
             }
 
             setupEventListeners() {
-                this.canvas.addEventListener('click', (e) => {
+                // Mouse move for hover effects and dragging
+                this.canvas.addEventListener('mousemove', (e) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mousePos = {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top
+                    };
+                    
+                    if (this.isDragging && this.selectedCards.length > 0) {
+                        // Dragging - show closed hand cursor
+                        this.canvas.style.cursor = 'grabbing';
+                        
+                        if (this.dragStartPos) {
+                            const deltaX = mousePos.x - this.dragStartPos.x;
+                            const deltaY = mousePos.y - this.dragStartPos.y;
+                            
+                            // Move selected cards
+                            this.selectedCards.forEach(card => {
+                                card.x += deltaX;
+                                card.y += deltaY;
+                            });
+                            
+                            this.dragStartPos = mousePos;
+                            this.render();
+                        }
+                    } else {
+                        // Check hover state
+                        const hoveredCard = this.getCardAt(mousePos.x, mousePos.y);
+                        if (hoveredCard !== this.hoveredCard) {
+                            this.hoveredCard = hoveredCard;
+                            
+                            if (hoveredCard) {
+                                // Show open hand cursor when hovering over card
+                                this.canvas.style.cursor = 'grab';
+                            } else {
+                                // Default cursor when not over card
+                                this.canvas.style.cursor = 'default';
+                            }
+                        }
+                    }
+                });
+
+                // Mouse down to start selection/dragging
+                this.canvas.addEventListener('mousedown', (e) => {
                     const rect = this.canvas.getBoundingClientRect();
                     this.clickPosition = {
                         x: e.clientX - rect.left,
@@ -286,11 +332,49 @@
                     
                     const clickedCard = this.getCardAt(this.clickPosition.x, this.clickPosition.y);
                     if (clickedCard) {
-                        this.toggleCardSelection(clickedCard);
+                        // Start dragging
+                        this.isDragging = true;
+                        this.dragStartPos = this.clickPosition;
+                        this.canvas.style.cursor = 'grabbing';
+                        
+                        // Select card if not already selected
+                        if (!this.selectedCards.includes(clickedCard)) {
+                            if (!e.shiftKey) {
+                                this.selectedCards = [clickedCard];
+                            } else {
+                                this.selectedCards.push(clickedCard);
+                            }
+                        }
                     } else {
+                        // Clear selection if clicking empty space
                         this.selectedCards = [];
+                        this.isDragging = false;
                     }
                     this.render();
+                });
+
+                // Mouse up to end dragging
+                this.canvas.addEventListener('mouseup', (e) => {
+                    this.isDragging = false;
+                    this.dragStartPos = null;
+                    
+                    // Reset cursor based on current hover state
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mousePos = {
+                        x: e.clientX - rect.left,
+                        y: e.clientY - rect.top
+                    };
+                    
+                    const hoveredCard = this.getCardAt(mousePos.x, mousePos.y);
+                    this.canvas.style.cursor = hoveredCard ? 'grab' : 'default';
+                });
+
+                // Mouse leave to reset cursor
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.isDragging = false;
+                    this.dragStartPos = null;
+                    this.hoveredCard = null;
+                    this.canvas.style.cursor = 'default';
                 });
             }
 
@@ -399,13 +483,25 @@
 
             drawCard(card) {
                 const isSelected = this.selectedCards.includes(card);
+                const isHovered = this.hoveredCard === card;
                 const x = card.x - this.cardSize / 2;
                 const y = card.y - this.cardSize / 2;
 
                 this.ctx.save();
 
-                // Shadow for unselected cards
-                if (!isSelected) {
+                // Enhanced shadow effects
+                if (isSelected) {
+                    // Selected cards get a stronger shadow
+                    this.ctx.shadowColor = 'rgba(59, 130, 246, 0.3)';
+                    this.ctx.shadowBlur = 12;
+                    this.ctx.shadowOffsetY = 4;
+                } else if (isHovered) {
+                    // Hovered cards get a subtle lift effect
+                    this.ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+                    this.ctx.shadowBlur = 10;
+                    this.ctx.shadowOffsetY = 3;
+                } else {
+                    // Default shadow for unselected cards
                     this.ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
                     this.ctx.shadowBlur = 8;
                     this.ctx.shadowOffsetY = 2;
@@ -473,7 +569,7 @@
                 this.render();
                 
                 setTimeout(() => {
-                    this.showNotification('Welcome! Click cards to select, or add your own companies.', 'info');
+                    this.showNotification('Welcome! Drag cards around, hold Shift to select multiple cards.', 'info');
                 }, 1000);
             }
 
