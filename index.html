@@ -1184,6 +1184,90 @@
                 this.render();
             }
 
+            async uploadLogoToStorage(file) {
+                if (!this.supabase || !this.isConnected) {
+                    console.log('📁 No Supabase connection - using data URL fallback');
+                    return null;
+                }
+
+                try {
+                    // Generate unique filename
+                    const timestamp = Date.now();
+                    const randomId = Math.random().toString(36).substring(2, 15);
+                    const extension = file.name.split('.').pop() || (file.type.includes('svg') ? 'svg' : 'png');
+                    const fileName = `logo-${timestamp}-${randomId}.${extension}`;
+
+                    console.log('📤 Uploading logo to Supabase Storage...', fileName);
+
+                    // Upload to Supabase Storage
+                    const { data, error } = await this.supabase.storage
+                        .from('logos')
+                        .upload(fileName, file, {
+                            cacheControl: '3600',
+                            upsert: false
+                        });
+
+                    if (error) {
+                        console.error('❌ Storage upload error:', error);
+                        return null;
+                    }
+
+                    // Get public URL
+                    const { data: urlData } = this.supabase.storage
+                        .from('logos')
+                        .getPublicUrl(fileName);
+
+                    return urlData.publicUrl;
+
+                } catch (error) {
+                    console.error('❌ Logo upload failed:', error);
+                    return null;
+                }
+            }
+
+            async uploadSVGCodeToStorage(svgCode) {
+                if (!this.supabase || !this.isConnected) {
+                    console.log('📁 No Supabase connection - using data URL fallback');
+                    return null;
+                }
+
+                try {
+                    // Generate unique filename
+                    const timestamp = Date.now();
+                    const randomId = Math.random().toString(36).substring(2, 15);
+                    const fileName = `svg-${timestamp}-${randomId}.svg`;
+
+                    console.log('📤 Uploading SVG code to Supabase Storage...', fileName);
+
+                    // Create blob from SVG code
+                    const blob = new Blob([svgCode], { type: 'image/svg+xml' });
+
+                    // Upload to Supabase Storage
+                    const { data, error } = await this.supabase.storage
+                        .from('logos')
+                        .upload(fileName, blob, {
+                            cacheControl: '3600',
+                            upsert: false
+                        });
+
+                    if (error) {
+                        console.error('❌ Storage upload error:', error);
+                        return null;
+                    }
+
+                    // Get public URL
+                    const { data: urlData } = this.supabase.storage
+                        .from('logos')
+                        .getPublicUrl(fileName);
+
+                    return urlData.publicUrl;
+
+                } catch (error) {
+                    console.error('❌ SVG upload failed:', error);
+                    return null;
+                }
+            }
+
 
 
             exportCanvas() {
@@ -1258,7 +1342,7 @@
             e.currentTarget.classList.remove('drag-over');
         }
 
-        function handleDrop(e) {
+        async function handleDrop(e) {
             e.preventDefault();
             e.stopPropagation();
             e.currentTarget.classList.remove('drag-over');
@@ -1269,51 +1353,70 @@
             if (files.length > 0) {
                 const file = files.find(f => f.type.includes('svg') || f.type.includes('png'));
                 if (file) {
-                    processFile(file);
+                    await processFile(file);
                 }
             } else if (text && (text.includes('<svg') || text.startsWith('data:image'))) {
-                processSVGCode(text);
+                await processSVGCode(text);
             }
         }
 
-        function handlePaste(e) {
+        async function handlePaste(e) {
             e.preventDefault();
             const text = (e.clipboardData || window.clipboardData).getData('text');
             if (text && text.includes('<svg')) {
-                processSVGCode(text);
+                await processSVGCode(text);
             }
         }
 
-        function handleFileSelect(e) {
+        async function handleFileSelect(e) {
             const file = e.target.files[0];
             if (file) {
-                processFile(file);
+                await processFile(file);
             }
         }
 
-        function processFile(file) {
+        async function processFile(file) {
             if (!file.type.includes('svg') && !file.type.includes('png')) {
                 app.showNotification('Please upload SVG or PNG files only', 'error');
                 return;
             }
             
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target.result;
-                if (file.type.includes('svg')) {
-                    // For SVG files, we can use the data URL directly
-                    showLogoPreview(result);
-                    uploadedLogoData = result;
+            try {
+                // Show loading state
+                const uploadArea = document.getElementById('logoUploadArea');
+                uploadArea.style.opacity = '0.5';
+                uploadArea.style.pointerEvents = 'none';
+                
+                // Upload to Supabase Storage
+                const logoUrl = await app.uploadLogoToStorage(file);
+                
+                if (logoUrl) {
+                    showLogoPreview(logoUrl);
+                    uploadedLogoData = logoUrl;
+                    console.log('✅ Logo uploaded to Supabase Storage:', logoUrl);
                 } else {
-                    // For PNG files, create data URL
-                    showLogoPreview(result);
-                    uploadedLogoData = result;
+                    throw new Error('Upload failed');
                 }
-            };
-            reader.readAsDataURL(file);
+            } catch (error) {
+                console.error('❌ Logo upload failed:', error);
+                app.showNotification('Logo upload failed, using local copy', 'error');
+                
+                // Fallback to data URL
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    showLogoPreview(e.target.result);
+                    uploadedLogoData = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            } finally {
+                // Restore upload area
+                const uploadArea = document.getElementById('logoUploadArea');
+                uploadArea.style.opacity = '1';
+                uploadArea.style.pointerEvents = 'auto';
+            }
         }
 
-        function processSVGCode(svgCode) {
+        async function processSVGCode(svgCode) {
             try {
                 // Clean and validate SVG
                 const cleanSVG = svgCode.trim();
@@ -1321,12 +1424,34 @@
                     throw new Error('Invalid SVG');
                 }
                 
-                // Create data URL from SVG code
-                const dataUrl = 'data:image/svg+xml;base64,' + btoa(cleanSVG);
-                showLogoPreview(dataUrl);
-                uploadedLogoData = dataUrl;
-                
-                // SVG processed silently
+                try {
+                    // Show loading state
+                    const uploadArea = document.getElementById('logoUploadArea');
+                    uploadArea.style.opacity = '0.5';
+                    uploadArea.style.pointerEvents = 'none';
+                    
+                    // Upload SVG code to Supabase Storage
+                    const logoUrl = await app.uploadSVGCodeToStorage(cleanSVG);
+                    
+                    if (logoUrl) {
+                        showLogoPreview(logoUrl);
+                        uploadedLogoData = logoUrl;
+                        console.log('✅ SVG uploaded to Supabase Storage:', logoUrl);
+                    } else {
+                        throw new Error('Upload failed');
+                    }
+                } catch (uploadError) {
+                    console.error('❌ SVG upload failed:', uploadError);
+                    // Fallback to data URL
+                    const dataUrl = 'data:image/svg+xml;base64,' + btoa(cleanSVG);
+                    showLogoPreview(dataUrl);
+                    uploadedLogoData = dataUrl;
+                } finally {
+                    // Restore upload area
+                    const uploadArea = document.getElementById('logoUploadArea');
+                    uploadArea.style.opacity = '1';
+                    uploadArea.style.pointerEvents = 'auto';
+                }
             } catch (error) {
                 app.showNotification('Invalid SVG code', 'error');
             }
