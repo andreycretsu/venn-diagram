@@ -80,6 +80,8 @@
         }
 
         .floating-button.success { background: #10b981; }
+        .floating-button.active { background: #8b5cf6; }
+        .floating-button.inactive { background: #64748b; }
 
         .modal {
             position: fixed;
@@ -200,6 +202,9 @@
         <div class="floating-controls">
             <button class="floating-button" onclick="openAddCardModal()" title="Add Card">
                 <i class="fas fa-plus"></i>
+            </button>
+            <button class="floating-button" onclick="toggleCircles()" title="Toggle Circles" id="circlesToggle">
+                <i class="fas fa-circle-dot"></i>
             </button>
             <button class="floating-button" onclick="populateCanvas()" title="Populate">
                 <i class="fas fa-magic"></i>
@@ -360,12 +365,35 @@
                     this.ctx.stroke();
                     this.ctx.restore();
 
-                    // Labels
+                    // Smart label positioning at circle edges
                     this.ctx.fillStyle = '#374151';
                     this.ctx.font = 'bold 16px Inter, sans-serif';
-                    this.ctx.textAlign = 'center';
-                    this.ctx.textBaseline = 'middle';
-                    this.ctx.fillText(circle.label, circle.x, circle.y - radius - 30);
+                    
+                    let labelX, labelY, textAlign, textBaseline;
+                    
+                    if (circle.label === 'HRIS') {
+                        // Left circle - label on left edge
+                        labelX = circle.x - radius - 20;
+                        labelY = circle.y;
+                        textAlign = 'right';
+                        textBaseline = 'middle';
+                    } else if (circle.label === 'Payroll') {
+                        // Right circle - label on right edge  
+                        labelX = circle.x + radius + 20;
+                        labelY = circle.y;
+                        textAlign = 'left';
+                        textBaseline = 'middle';
+                    } else if (circle.label === 'Expense') {
+                        // Bottom circle - label on bottom edge
+                        labelX = circle.x;
+                        labelY = circle.y + radius + 25;
+                        textAlign = 'center';
+                        textBaseline = 'top';
+                    }
+                    
+                    this.ctx.textAlign = textAlign;
+                    this.ctx.textBaseline = textBaseline;
+                    this.ctx.fillText(circle.label, labelX, labelY);
                 });
             }
 
@@ -541,9 +569,41 @@
             app.exportCanvas();
         }
 
+        function toggleCircles() {
+            app.showCircles = !app.showCircles;
+            app.render();
+            
+            const button = document.getElementById('circlesToggle');
+            const icon = button.querySelector('i');
+            
+            if (app.showCircles) {
+                button.className = 'floating-button active';
+                icon.className = 'fas fa-circle-dot';
+                button.title = 'Hide Circles';
+            } else {
+                button.className = 'floating-button inactive';
+                icon.className = 'fas fa-circle';
+                button.title = 'Show Circles';
+            }
+            
+            app.showNotification(
+                app.showCircles ? 'Circles shown' : 'Circles hidden', 
+                'info'
+            );
+        }
+
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             app = new BusinessCardCanvas();
+            
+            // Initialize circles toggle button state
+            const button = document.getElementById('circlesToggle');
+            if (app.showCircles) {
+                button.className = 'floating-button active';
+                button.querySelector('i').className = 'fas fa-circle-dot';
+                button.title = 'Hide Circles';
+            }
+            
             console.log('✅ Business Card Canvas ready');
         });
     </script>
