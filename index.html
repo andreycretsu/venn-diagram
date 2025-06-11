@@ -42,14 +42,93 @@
             flex: 1;
             position: relative;
             background: var(--color-background);
+            /* Stylish grid background with dots and lines */
+            background-image: 
+                /* Large dots every 100px */
+                radial-gradient(circle at 2px 2px, rgba(59, 130, 246, 0.15) 1px, transparent 1px),
+                /* Small dots every 20px */
+                radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.1) 0.5px, transparent 0.5px),
+                /* Vertical lines every 200px */
+                linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+                /* Horizontal lines every 200px */
+                linear-gradient(0deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+            background-size: 
+                100px 100px,  /* Large dots spacing */
+                20px 20px,    /* Small dots spacing */
+                200px 100%,   /* Vertical lines spacing */
+                100% 200px;   /* Horizontal lines spacing */
+            background-position:
+                0 0,          /* Large dots offset */
+                0 0,          /* Small dots offset */
+                0 0,          /* Vertical lines offset */
+                0 0;          /* Horizontal lines offset */
+            animation: gridMove 60s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { 
+                background-position: 0 0, 0 0, 0 0, 0 0; 
+            }
+            100% { 
+                background-position: 100px 100px, 20px 20px, 200px 0, 0 200px; 
+            }
+        }
+
+        /* Responsive grid patterns */
+        @media (max-width: 768px) {
+            .canvas-container {
+                background-size: 
+                    50px 50px,    /* Smaller large dots on mobile */
+                    15px 15px,    /* Smaller small dots */
+                    100px 100%,   /* Closer vertical lines */
+                    100% 100px;   /* Closer horizontal lines */
+            }
+            
+            @keyframes gridMove {
+                0% { 
+                    background-position: 0 0, 0 0, 0 0, 0 0; 
+                }
+                100% { 
+                    background-position: 50px 50px, 15px 15px, 100px 0, 0 100px; 
+                }
+            }
+        }
+
+        @media (min-width: 1920px) {
+            .canvas-container {
+                background-size: 
+                    150px 150px,  /* Larger spacing on big screens */
+                    30px 30px,    /* Larger small dots */
+                    300px 100%,   /* Wider vertical spacing */
+                    100% 300px;   /* Wider horizontal spacing */
+            }
+        }
+
+        .canvas-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255, 255, 255, 0.1) 0%,
+                rgba(59, 130, 246, 0.02) 50%,
+                rgba(148, 163, 184, 0.05) 100%
+            );
+            pointer-events: none;
+            z-index: 1;
         }
 
         #canvas {
             display: block;
             width: 100%;
             height: 100%;
-            background: var(--color-background);
+            background: transparent;
             cursor: default;
+            position: relative;
+            z-index: 2;
         }
 
         .floating-controls {
@@ -428,6 +507,12 @@
                     </label>
                 </div>
                 
+                <div class="control-group">
+                    <label class="control-label">
+                        <input type="checkbox" id="showPointACheckbox"> Show Point A (Global)
+                    </label>
+                </div>
+                
                 <div class="modal-footer">
                     <button class="btn btn-primary" onclick="closeModal('controlsModal')">Done</button>
                 </div>
@@ -449,6 +534,9 @@
             </button>
             <button class="floating-button" onclick="toggleControlsModal()" title="Circle Controls" id="controlsFab">
                 <i class="fas fa-sliders-h"></i>
+            </button>
+            <button class="floating-button" onclick="testConnection()" title="Test Sync" id="syncTestFab" style="background: #f59e0b;">
+                <i class="fas fa-sync-alt"></i>
             </button>
             <button class="floating-button success" onclick="exportCanvas()" title="Export">
                 <i class="fas fa-download"></i>
@@ -547,6 +635,7 @@
                 this.selectedCards = [];
                 this.clickPosition = { x: 0, y: 0 };
                 this.showCircles = true;
+                this.showPointA = false; // Global toggle for Point A visibility
                 this.isDragging = false;
                 this.dragStartPos = null;
                 this.dragOffset = null;
@@ -614,7 +703,8 @@
                     }
                     
                 } catch (error) {
-                    console.error('Error in initSupabase:', error);
+                    console.error('❌ Error in initSupabase:', error);
+                    this.updateStatus('disconnected', 'Sync Failed - ' + error.message.substring(0, 30));
                     this.loadFromStorage();
                     if (this.cards.length === 0) {
                         this.initializeCleanCanvas();
@@ -624,54 +714,91 @@
 
             async connectToSupabase() {
                 try {
+                    console.log('🔗 Testing Supabase connection...', {
+                        url: supabaseConfig.url,
+                        keyLength: supabaseConfig.key.length
+                    });
+                    
                     supabaseClient = supabase.createClient(supabaseConfig.url, supabaseConfig.key);
                     
-                    // Test connection
+                    // Test connection with more detailed error info
                     const { data: testData, error: testError } = await supabaseClient
                         .from('canvas_data')
-                        .select('id')
+                        .select('id, cards, connections, settings')
                         .limit(1);
                     
-                    if (!testError || testError.code === 'PGRST116') {
-                        this.supabase = supabaseClient;
-                        this.isConnected = true;
+                    if (testError) {
+                        console.log('🔍 Supabase test error:', testError);
                         
-                        // Create table if it doesn't exist
-                        if (testError && testError.code === 'PGRST116') {
+                        if (testError.code === 'PGRST116') {
+                            // Table doesn't exist
+                            console.log('📋 Table canvas_data does not exist');
                             await this.createSupabaseTable();
+                            return false; // Let user create table manually
+                        } else if (testError.code === '42P01') {
+                            // Relation does not exist
+                            console.log('📋 Database relation does not exist');
+                            await this.createSupabaseTable();
+                            return false;
+                        } else {
+                            // Other error
+                            console.error('❌ Supabase error:', testError.message);
+                            throw new Error(`Database error: ${testError.message}`);
                         }
-                        
-                        return true;
                     }
                     
-                    return false;
+                    console.log('✅ Supabase connection successful!', { 
+                        dataFound: testData?.length || 0 
+                    });
+                    
+                    this.supabase = supabaseClient;
+                    this.isConnected = true;
+                    return true;
+                    
                 } catch (error) {
-                    console.error('Supabase connection failed:', error);
+                    console.error('❌ Supabase connection failed:', {
+                        error: error.message,
+                        code: error.code,
+                        details: error.details
+                    });
                     return false;
                 }
             }
 
             async createSupabaseTable() {
-                // This would normally be done in Supabase dashboard
-                // Providing SQL for reference
-                console.log(`
-                    To enable cloud autosave, create this table in Supabase SQL editor:
-                    
-                    CREATE TABLE IF NOT EXISTS canvas_data (
-                        id text PRIMARY KEY DEFAULT 'shared-canvas',
-                        cards jsonb DEFAULT '[]'::jsonb,
-                        connections jsonb DEFAULT '[]'::jsonb,
-                        settings jsonb DEFAULT '{}'::jsonb,
-                        updated_at timestamp with time zone DEFAULT now()
-                    );
-                    
-                    -- Enable real-time
-                    ALTER PUBLICATION supabase_realtime ADD TABLE canvas_data;
-                    
-                    -- Insert initial row
-                    INSERT INTO canvas_data (id) VALUES ('shared-canvas')
-                    ON CONFLICT (id) DO NOTHING;
-                `);
+                console.log('');
+                console.log('🚀 SUPABASE SETUP REQUIRED!');
+                console.log('');
+                console.log('📋 Please run this SQL in your Supabase SQL Editor:');
+                console.log('');
+                console.log(`-- Create the main table
+CREATE TABLE IF NOT EXISTS canvas_data (
+    id text PRIMARY KEY DEFAULT 'shared-canvas',
+    cards jsonb DEFAULT '[]'::jsonb,
+    connections jsonb DEFAULT '[]'::jsonb,
+    settings jsonb DEFAULT '{}'::jsonb,
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+-- Enable real-time updates
+ALTER PUBLICATION supabase_realtime ADD TABLE canvas_data;
+
+-- Insert initial row
+INSERT INTO canvas_data (id) VALUES ('shared-canvas')
+ON CONFLICT (id) DO NOTHING;
+
+-- Optional: Enable Row Level Security
+ALTER TABLE canvas_data ENABLE ROW LEVEL SECURITY;
+
+-- Optional: Allow anonymous access (for demo purposes)
+CREATE POLICY "Allow anonymous access" ON canvas_data
+    FOR ALL
+    TO anon
+    USING (true)
+    WITH CHECK (true);`);
+                console.log('');
+                console.log('⚡ After running the SQL, refresh this page to enable sync!');
+                console.log('');
             }
 
             setupAutosave() {
@@ -753,6 +880,7 @@
                             this.centerDistance = data.settings.centerDistance || 200;
                             this.cardSize = data.settings.cardSize || 64;
                             this.showCircles = data.settings.showCircles !== false;
+                            this.showPointA = data.settings.showPointA || false;
                             this.updateControlsUI();
                         }
                         
@@ -786,7 +914,8 @@
                             circleRadius: 200,
                             centerDistance: 200,
                             cardSize: 64,
-                            showCircles: true
+                            showCircles: true,
+                            showPointA: false
                         },
                         updated_at: new Date().toISOString()
                     };
@@ -858,6 +987,7 @@
                     this.centerDistance = data.settings.centerDistance || 200;
                     this.cardSize = data.settings.cardSize || 64;
                     this.showCircles = data.settings.showCircles !== false;
+                    this.showPointA = data.settings.showPointA || false;
                     this.updateControlsUI();
                 }
                 
@@ -874,6 +1004,7 @@
             async saveToSupabase() {
                 if (!this.supabase || !this.isConnected) {
                     console.log('💾 No Supabase connection - saving locally only');
+                    this.updateStatus('disconnected', 'Local storage only');
                     this.saveToStorage();
                     return;
                 }
@@ -889,7 +1020,8 @@
                             circleRadius: this.circleRadius,
                             centerDistance: this.centerDistance,
                             cardSize: this.cardSize,
-                            showCircles: this.showCircles
+                            showCircles: this.showCircles,
+                            showPointA: this.showPointA
                         },
                         updated_at: new Date().toISOString()
                     };
@@ -904,7 +1036,12 @@
                         .upsert(saveData, { onConflict: 'id' });
 
                     if (error) {
-                        console.error('❌ Supabase save error:', error);
+                        console.error('❌ Supabase save error:', {
+                            message: error.message,
+                            code: error.code,
+                            details: error.details,
+                            hint: error.hint
+                        });
                         throw error;
                     }
 
@@ -915,9 +1052,34 @@
                     }, 2000);
 
                 } catch (error) {
-                    console.error('❌ Save to Supabase failed:', error.message);
-                    this.updateStatus('disconnected', 'Sync Failed - Local Only');
+                    console.error('❌ Save to Supabase failed:', {
+                        message: error.message,
+                        code: error.code
+                    });
+                    
+                    // Specific error handling
+                    if (error.code === '42P01') {
+                        this.updateStatus('disconnected', 'Table missing - Check setup');
+                    } else if (error.code === 'PGRST116') {
+                        this.updateStatus('disconnected', 'No data found - Check setup');
+                    } else {
+                        this.updateStatus('disconnected', 'Sync Failed - ' + error.message.substring(0, 20));
+                    }
+                    
+                    // Always save locally as backup
                     this.saveToStorage();
+                    
+                    // Try to reconnect after a delay
+                    setTimeout(() => {
+                        console.log('🔄 Attempting to reconnect...');
+                        this.connectToSupabase().then(connected => {
+                            if (connected) {
+                                this.updateStatus('connected', 'Reconnected! ✓');
+                                this.isConnected = true;
+                            }
+                        });
+                    }, 5000);
+                    
                 } finally {
                     this.isUpdating = false;
                 }
@@ -936,6 +1098,7 @@
                             this.centerDistance = data.settings.centerDistance || 200;
                             this.cardSize = data.settings.cardSize || 64;
                             this.showCircles = data.settings.showCircles !== false;
+                            this.showPointA = data.settings.showPointA || false;
                             this.updateControlsUI();
                         }
                     }
@@ -952,7 +1115,8 @@
                         circleRadius: this.circleRadius,
                         centerDistance: this.centerDistance,
                         cardSize: this.cardSize,
-                        showCircles: this.showCircles
+                        showCircles: this.showCircles,
+                        showPointA: this.showPointA
                     }
                 };
                 localStorage.setItem('venn-canvas-local', JSON.stringify(data));
@@ -966,6 +1130,7 @@
                 document.getElementById('cardSizeSlider').value = this.cardSize;
                 document.getElementById('cardSizeValue').textContent = this.cardSize;
                 document.getElementById('showCirclesCheckbox').checked = this.showCircles;
+                document.getElementById('showPointACheckbox').checked = this.showPointA;
             }
 
             resizeCanvas() {
@@ -1093,8 +1258,14 @@
                 // Mouse up to end dragging
                 this.canvas.addEventListener('mouseup', (e) => {
                     if (this.isDragging) {
-                        // Mark for autosave
+                        // Mark for autosave and log coordinate changes
                         this.hasChanges = true;
+                        console.log('📍 Card positions updated:', this.cards.map(c => ({ 
+                            company: c.company, 
+                            x: Math.round(c.x), 
+                            y: Math.round(c.y),
+                            version: c.isVersion || 'normal'
+                        })));
                     }
                     
                     this.isDragging = false;
@@ -1298,12 +1469,8 @@
                 // Save context state
                 this.ctx.save();
                 
-                // Clear canvas
+                // Clear canvas (transparent background)
                 this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                
-                // White background
-                this.ctx.fillStyle = '#ffffff';
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
                 
                 // Draw circles
                 if (this.showCircles) {
@@ -1467,32 +1634,9 @@
                     this.ctx.fillText(initials, textX, textY);
                 }
                 
-                // Draw version badge if card has a version
-                if (card.isVersion) {
-                    const badgeX = card.x + this.cardSize / 2 - 8;
-                    const badgeY = card.y - this.cardSize / 2 + 8;
-                    
-                    this.ctx.save();
-                    
-                    // Badge background
-                    this.ctx.fillStyle = card.isVersion === 'A' ? '#3b82f6' : '#10b981';
-                    this.ctx.beginPath();
-                    this.ctx.arc(badgeX, badgeY, 10, 0, 2 * Math.PI);
-                    this.ctx.fill();
-                    
-                    // Badge border
-                    this.ctx.strokeStyle = '#ffffff';
-                    this.ctx.lineWidth = 2;
-                    this.ctx.stroke();
-                    
-                    // Badge letter
-                    this.ctx.fillStyle = '#ffffff';
-                    this.ctx.font = 'bold 12px Inter, sans-serif';
-                    this.ctx.textAlign = 'center';
-                    this.ctx.textBaseline = 'middle';
-                    this.ctx.fillText(card.isVersion, badgeX, badgeY);
-                    
-                    this.ctx.restore();
+                // Draw directional arrows for Point B cards (no badges)
+                if (card.isVersion === 'B') {
+                    this.drawPointBArrow(card);
                 }
                 
                 // Show company label on hover
@@ -1542,6 +1686,41 @@
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'middle';
                 this.ctx.fillText(card.company, card.x, labelY);
+                
+                this.ctx.restore();
+            }
+
+            drawPointBArrow(card) {
+                this.ctx.save();
+                
+                // Position arrow at bottom-right of card
+                const arrowX = card.x + this.cardSize / 2 - 12;
+                const arrowY = card.y + this.cardSize / 2 - 12;
+                
+                // Draw arrow pointing right and down (southeast direction)
+                this.ctx.fillStyle = '#10b981'; // Green color
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                
+                // Arrow shape
+                this.ctx.beginPath();
+                this.ctx.moveTo(arrowX - 6, arrowY - 3);
+                this.ctx.lineTo(arrowX + 3, arrowY);
+                this.ctx.lineTo(arrowX - 6, arrowY + 3);
+                this.ctx.lineTo(arrowX - 3, arrowY);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+                
+                // Second arrow for double-arrow effect
+                this.ctx.beginPath();
+                this.ctx.moveTo(arrowX - 2, arrowY - 3);
+                this.ctx.lineTo(arrowX + 7, arrowY);
+                this.ctx.lineTo(arrowX - 2, arrowY + 3);
+                this.ctx.lineTo(arrowX + 1, arrowY);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
                 
                 this.ctx.restore();
             }
@@ -1907,6 +2086,96 @@
                 setTimeout(() => notification.remove(), 3000);
             }
 
+            async testConnection() {
+                console.log('🧪 TESTING SUPABASE CONNECTION...');
+                this.updateStatus('connected', 'Testing connection...');
+                
+                try {
+                    // Test 1: Basic Supabase client creation
+                    console.log('🔗 Test 1: Creating Supabase client...');
+                    const testClient = supabase.createClient(supabaseConfig.url, supabaseConfig.key);
+                    
+                    // Test 2: Check if table exists and has correct structure
+                    console.log('📋 Test 2: Checking table structure...');
+                    const { data: tableData, error: tableError } = await testClient
+                        .from('canvas_data')
+                        .select('id, cards, connections, settings, updated_at')
+                        .limit(1);
+                    
+                    if (tableError) {
+                        console.error('❌ Table test failed:', tableError);
+                        
+                        if (tableError.code === '42P01' || tableError.code === 'PGRST116') {
+                            this.updateStatus('disconnected', 'Database table missing');
+                            this.showNotification('Database table missing! Check console for setup instructions.', 'error');
+                            await this.createSupabaseTable();
+                            return;
+                        } else {
+                            throw tableError;
+                        }
+                    }
+                    
+                    console.log('✅ Table structure OK:', tableData);
+                    
+                    // Test 3: Try a test write
+                    console.log('💾 Test 3: Testing write permissions...');
+                    const testData = {
+                        id: 'shared-canvas',
+                        cards: this.cards,
+                        connections: this.connections,
+                        settings: {
+                            circleRadius: this.circleRadius,
+                            centerDistance: this.centerDistance,
+                            cardSize: this.cardSize,
+                            showCircles: this.showCircles
+                        },
+                        updated_at: new Date().toISOString()
+                    };
+                    
+                    const { error: writeError } = await testClient
+                        .from('canvas_data')
+                        .upsert(testData, { onConflict: 'id' });
+                    
+                    if (writeError) {
+                        console.error('❌ Write test failed:', writeError);
+                        throw writeError;
+                    }
+                    
+                    console.log('✅ Write test OK');
+                    
+                    // Test 4: Try real-time subscription
+                    console.log('📡 Test 4: Testing real-time...');
+                    const testChannel = testClient
+                        .channel('test-channel')
+                        .on('postgres_changes',
+                            { event: '*', schema: 'public', table: 'canvas_data' },
+                            (payload) => console.log('📡 Real-time test received:', payload)
+                        )
+                        .subscribe((status) => {
+                            console.log('📡 Real-time subscription status:', status);
+                        });
+                    
+                    // Clean up test channel after 5 seconds
+                    setTimeout(() => {
+                        testChannel.unsubscribe();
+                        console.log('🧹 Test channel cleaned up');
+                    }, 5000);
+                    
+                    // All tests passed!
+                    this.supabase = testClient;
+                    this.isConnected = true;
+                    this.updateStatus('connected', 'All tests passed! ✓');
+                    this.showNotification('Sync connection working perfectly! 🎉', 'success');
+                    
+                    // Restart real-time subscription
+                    this.setupRealTimeSubscription();
+                    
+                } catch (error) {
+                    console.error('❌ Connection test failed:', error);
+                    this.updateStatus('disconnected', 'Test failed: ' + error.message.substring(0, 20));
+                    this.showNotification('Sync test failed: ' + error.message, 'error');
+                }
+            }
 
         }
 
@@ -2115,7 +2384,11 @@
             }
         }
 
-
+        function testConnection() {
+            if (app) {
+                app.testConnection();
+            }
+        }
 
         function exportCanvas() {
             app.exportCanvas();
@@ -2129,6 +2402,15 @@
 
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 BUSINESS CARD CANVAS STARTING...');
+            console.log('');
+            console.log('📊 DIAGNOSTIC INFO:');
+            console.log('- Supabase URL:', supabaseConfig.url);
+            console.log('- Key length:', supabaseConfig.key.length, 'chars');
+            console.log('- Browser:', navigator.userAgent.split(' ').pop());
+            console.log('- Storage available:', 'localStorage' in window);
+            console.log('');
+            
             app = new BusinessCardCanvas();
             
             // Style the controls FAB
@@ -2143,6 +2425,7 @@
             const distanceValue = document.getElementById('distanceValue');
             const cardSizeValue = document.getElementById('cardSizeValue');
             const showCirclesCheckbox = document.getElementById('showCirclesCheckbox');
+            const showPointACheckbox = document.getElementById('showPointACheckbox');
             
             // Update UI with loaded values
             app.updateControlsUI();
@@ -2174,29 +2457,35 @@
                 app.hasChanges = true; // Mark for autosave
             });
             
+            showPointACheckbox.addEventListener('change', (e) => {
+                app.showPointA = e.target.checked;
+                app.render();
+                app.hasChanges = true; // Mark for autosave
+            });
+            
             console.log('✅ Business Card Canvas ready with real-time collaboration');
             console.log('🌐 Multi-device collaboration: Supabase-powered');
             console.log('💾 Auto-save: Instant across all devices');
+            console.log('');
+            console.log('🔧 SYNC TROUBLESHOOTING:');
+            console.log('1. Check the status indicator (top-right corner)');
+            console.log('2. Click the orange sync test button to diagnose issues');
+            console.log('3. Open browser console to see detailed error messages');
+            console.log('4. If table is missing, follow the SQL setup instructions');
+            console.log('');
             
             // Setup instructions
-            if (!app.isConnected) {
-                console.log('');
-                console.log('🚀 SETUP SUPABASE FOR REAL COLLABORATION:');
-                console.log('1. Go to https://supabase.com and create a project');
-                console.log('2. Run this SQL in the SQL Editor:');
-                console.log(`
-CREATE TABLE canvas_data (
-  id text PRIMARY KEY DEFAULT 'shared-canvas',
-  cards jsonb DEFAULT '[]'::jsonb,
-  settings jsonb DEFAULT '{}'::jsonb,
-  updated_at timestamp with time zone DEFAULT now()
-);
-ALTER PUBLICATION supabase_realtime ADD TABLE canvas_data;
-INSERT INTO canvas_data (id) VALUES ('shared-canvas');`);
-                console.log('3. Update supabaseConfig with your project URL and anon key');
-                console.log('4. Refresh and enjoy real multi-device collaboration! 🎉');
-                console.log('');
-            }
+            setTimeout(() => {
+                if (!app.isConnected) {
+                    console.log('');
+                    console.log('🚀 SETUP SUPABASE FOR REAL COLLABORATION:');
+                    console.log('1. Go to https://supabase.com and create a project');
+                    console.log('2. Click the orange sync test button for setup instructions');
+                    console.log('3. Update supabaseConfig with your project URL and anon key');
+                    console.log('4. Refresh and enjoy real multi-device collaboration! 🎉');
+                    console.log('');
+                }
+            }, 2000);
         });
     </script>
 </body>
