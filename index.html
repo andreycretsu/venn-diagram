@@ -434,10 +434,10 @@
             </div>
         </div>
 
-        <!-- Auto-save Status (Hidden for local use) -->
-        <div class="autosave-status" style="display: none;">
+        <!-- Auto-save Status -->
+        <div class="autosave-status" id="autosaveStatus">
             <div class="status-indicator" id="statusIndicator"></div>
-            <span id="statusText">Auto-save Active</span>
+            <span id="statusText">Checking connection...</span>
         </div>
 
         <div class="floating-controls">
@@ -570,6 +570,8 @@
                 this.draggingPoint = null;
                 this.hasUnsavedChanges = false;
                 this.editStartState = null;
+                this.hasChanges = false;
+                this.autosaveInterval = null;
                 
                 this.circleRadius = 200;
                 this.centerDistance = 200;
@@ -599,21 +601,35 @@
 
             async initSupabase() {
                 try {
-                    // Skip Supabase for local development
-                    console.log('🏠 Running in local mode - Supabase disabled');
-                    this.isConnected = false;
+                    console.log('🔄 Initializing Supabase for cloud autosave...');
                     
-                    // Just use localStorage
-                    this.loadFromStorage();
-                    if (this.cards.length === 0) {
-                        this.initializeCleanCanvas();
+                    // Try to connect to Supabase
+                    const connected = await this.connectToSupabase();
+                    
+                    if (connected) {
+                        console.log('✅ Supabase connected - autosave enabled');
+                        this.updateStatus('connected', 'Cloud autosave active');
+                        
+                        // Load data from Supabase
+                        await this.loadFromSupabase();
+                        
+                        // Set up real-time sync
+                        this.setupRealTimeSubscription();
+                        
+                        // Set up autosave interval
+                        this.setupAutosave();
+                    } else {
+                        // Fallback to localStorage
+                        console.log('⚠️ Using local storage only');
+                        this.updateStatus('disconnected', 'Local storage only');
+                        this.loadFromStorage();
+                        if (this.cards.length === 0) {
+                            this.initializeCleanCanvas();
+                        }
                     }
                     
-                    // Optionally try Supabase in background without errors
-                    this.trySupabaseInBackground();
-                    
                 } catch (error) {
-                    console.log('Running locally without cloud sync');
+                    console.error('Error in initSupabase:', error);
                     this.loadFromStorage();
                     if (this.cards.length === 0) {
                         this.initializeCleanCanvas();
@@ -621,9 +637,11 @@
                 }
             }
 
-            async trySupabaseInBackground() {
+            async connectToSupabase() {
                 try {
                     supabaseClient = supabase.createClient(supabaseConfig.url, supabaseConfig.key);
+                    
+                    // Test connection
                     const { data: testData, error: testError } = await supabaseClient
                         .from('canvas_data')
                         .select('id')
@@ -632,13 +650,72 @@
                     if (!testError || testError.code === 'PGRST116') {
                         this.supabase = supabaseClient;
                         this.isConnected = true;
-                        console.log('✅ Supabase connected in background');
-                        this.setupRealTimeSubscription();
+                        
+                        // Create table if it doesn't exist
+                        if (testError && testError.code === 'PGRST116') {
+                            await this.createSupabaseTable();
+                        }
+                        
+                        return true;
                     }
+                    
+                    return false;
                 } catch (error) {
-                    // Silently fail - we're running locally anyway
-                    console.log('Supabase not available - continuing in local mode');
+                    console.error('Supabase connection failed:', error);
+                    return false;
                 }
+            }
+
+            async createSupabaseTable() {
+                // This would normally be done in Supabase dashboard
+                // Providing SQL for reference
+                console.log(`
+                    To enable cloud autosave, create this table in Supabase SQL editor:
+                    
+                    CREATE TABLE IF NOT EXISTS canvas_data (
+                        id text PRIMARY KEY DEFAULT 'shared-canvas',
+                        cards jsonb DEFAULT '[]'::jsonb,
+                        connections jsonb DEFAULT '[]'::jsonb,
+                        settings jsonb DEFAULT '{}'::jsonb,
+                        updated_at timestamp with time zone DEFAULT now()
+                    );
+                    
+                    -- Enable real-time
+                    ALTER PUBLICATION supabase_realtime ADD TABLE canvas_data;
+                    
+                    -- Insert initial row
+                    INSERT INTO canvas_data (id) VALUES ('shared-canvas')
+                    ON CONFLICT (id) DO NOTHING;
+                `);
+            }
+
+            setupAutosave() {
+                // Clear any existing interval
+                if (this.autosaveInterval) {
+                    clearInterval(this.autosaveInterval);
+                }
+                
+                // Autosave every 3 seconds if there are changes
+                this.autosaveInterval = setInterval(() => {
+                    if (this.hasChanges && !this.editABMode && !this.isDragging) {
+                        this.saveToSupabase();
+                        this.hasChanges = false;
+                    }
+                }, 3000);
+                
+                // Also save on window blur/unload
+                window.addEventListener('blur', () => {
+                    if (this.hasChanges && !this.editABMode) {
+                        this.saveToSupabase();
+                        this.hasChanges = false;
+                    }
+                });
+                
+                window.addEventListener('beforeunload', () => {
+                    if (this.hasChanges && !this.editABMode) {
+                        this.saveToSupabase();
+                    }
+                });
             }
 
             updateStatus(status, text) {
@@ -681,73 +758,64 @@
                         throw error;
                     }
 
-                    if (data) {
-                        // Force clear any old pre-populated data
-                        console.log('🧹 Clearing old Supabase data and starting fresh...');
-                        await this.clearSupabaseData();
-                        this.cards = [];
-                        console.log('✅ Supabase data cleared - clean canvas ready');
+                    if (data && data.cards) {
+                        console.log('📥 Loading saved canvas from cloud...');
+                        this.cards = data.cards || [];
+                        this.connections = data.connections || [];
+                        
+                        if (data.settings) {
+                            this.circleRadius = data.settings.circleRadius || 200;
+                            this.centerDistance = data.settings.centerDistance || 200;
+                            this.cardSize = data.settings.cardSize || 64;
+                            this.showCircles = data.settings.showCircles !== false;
+                            this.updateControlsUI();
+                        }
+                        
+                        // Pre-load all logos
+                        this.cards.forEach(card => {
+                            if (card.logo) {
+                                this.loadLogo(card.logo);
+                            }
+                        });
+                        
+                        this.render();
+                    } else {
+                        // No saved data, start with clean canvas
+                        this.initializeCleanCanvas();
                     }
-
-                    // Always start with clean canvas
-                    this.initializeCleanCanvas();
                 } catch (error) {
                     console.error('❌ Error loading from Supabase:', error.message);
                     this.initializeCleanCanvas();
                 }
             }
 
-            async clearSupabaseData() {
-                try {
-                    const { error } = await this.supabase
-                        .from('canvas_data')
-                        .update({
-                            cards: [],
-                            settings: {
-                                circleRadius: 200,
-                                centerDistance: 200,
-                                cardSize: 64,
-                                showCircles: true
-                            },
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', 'shared-canvas');
 
-                    if (error) throw error;
-                    console.log('✅ Cleared Supabase data successfully');
-                } catch (error) {
-                    console.error('❌ Failed to clear Supabase data:', error.message);
-                }
-            }
 
             async createInitialRecord() {
                 try {
                     const initialData = {
                         id: 'shared-canvas',
                         cards: [],
+                        connections: [],
                         settings: {
                             circleRadius: 200,
                             centerDistance: 200,
-                            cardSize: 80,
+                            cardSize: 64,
                             showCircles: true
                         },
                         updated_at: new Date().toISOString()
                     };
 
-                    // First try to clear any existing data
-                    await this.supabase
-                        .from('canvas_data')
-                        .delete()
-                        .eq('id', 'shared-canvas');
-
-                    // Then insert fresh empty data
+                    // Insert only if doesn't exist
                     const { error } = await this.supabase
                         .from('canvas_data')
                         .insert(initialData);
 
-                    if (error) throw error;
+                    if (error && error.code !== '23505') { // 23505 = duplicate key
+                        throw error;
+                    }
                     
-                    console.log('✅ Created fresh empty Supabase record');
+                    console.log('✅ Created initial Supabase record');
                     this.initializeCleanCanvas();
                 } catch (error) {
                     console.error('❌ Failed to create initial record:', error.message);
@@ -788,18 +856,33 @@
             handleRealtimeUpdate(data) {
                 console.log('📡 INSTANT UPDATE received from another device!', {
                     cards: data.cards?.length || 0,
+                    connections: data.connections?.length || 0,
                     isDragging: this.isDragging
                 });
                 
+                // Don't update if we're currently dragging
+                if (this.isDragging) {
+                    return;
+                }
+                
                 // Update immediately for instant sync
                 this.cards = data.cards || [];
+                this.connections = data.connections || [];
                 if (data.settings) {
                     this.circleRadius = data.settings.circleRadius || 200;
                     this.centerDistance = data.settings.centerDistance || 200;
-                                            this.cardSize = data.settings.cardSize || 64;
+                    this.cardSize = data.settings.cardSize || 64;
                     this.showCircles = data.settings.showCircles !== false;
                     this.updateControlsUI();
                 }
+                
+                // Pre-load any new logos
+                this.cards.forEach(card => {
+                    if (card.logo && !this.loadedLogos.has(card.logo)) {
+                        this.loadLogo(card.logo);
+                    }
+                });
+                
                 this.render();
             }
 
@@ -816,6 +899,7 @@
                     const saveData = {
                         id: 'shared-canvas',
                         cards: this.cards,
+                        connections: this.connections,
                         settings: {
                             circleRadius: this.circleRadius,
                             centerDistance: this.centerDistance,
@@ -825,7 +909,10 @@
                         updated_at: new Date().toISOString()
                     };
 
-                    console.log('💾 Saving to Supabase...', { cards: this.cards.length });
+                    console.log('💾 Autosaving to cloud...', { 
+                        cards: this.cards.length,
+                        connections: this.connections.length 
+                    });
 
                     const { error } = await this.supabase
                         .from('canvas_data')
@@ -836,8 +923,11 @@
                         throw error;
                     }
 
-                    console.log('✅ Successfully saved to Supabase - all devices will sync!');
-                    // No need for constant status updates - just keep it simple
+                    // Update status briefly to show save
+                    this.updateStatus('connected', 'Saved to cloud ✓');
+                    setTimeout(() => {
+                        this.updateStatus('connected', 'Cloud autosave active');
+                    }, 2000);
 
                 } catch (error) {
                     console.error('❌ Save to Supabase failed:', error.message);
@@ -848,18 +938,20 @@
                 }
             }
 
-            // Fallback localStorage methods (for when Firebase isn't configured)
+            // Fallback localStorage methods
             loadFromStorage() {
                 try {
                     const saved = localStorage.getItem('venn-canvas-local');
                     if (saved) {
                         const data = JSON.parse(saved);
                         this.cards = data.cards || [];
+                        this.connections = data.connections || [];
                         if (data.settings) {
                             this.circleRadius = data.settings.circleRadius || 200;
                             this.centerDistance = data.settings.centerDistance || 200;
                             this.cardSize = data.settings.cardSize || 64;
                             this.showCircles = data.settings.showCircles !== false;
+                            this.updateControlsUI();
                         }
                     }
                 } catch (error) {
@@ -870,6 +962,7 @@
             saveToStorage() {
                 const data = {
                     cards: this.cards,
+                    connections: this.connections,
                     settings: {
                         circleRadius: this.circleRadius,
                         centerDistance: this.centerDistance,
@@ -1165,7 +1258,7 @@
                             // Reset duplicate mode
                             this.cardToDuplicate = null;
                             this.selectedCards = [];
-                            this.saveToSupabase();
+                            this.hasChanges = true;  // Mark for autosave
                             this.render();
                             return;
                         }
@@ -1210,8 +1303,8 @@
                             this.hasUnsavedChanges = true;
                             this.updateSaveButton();
                         } else {
-                            // Save after dragging ends in normal mode
-                            this.saveToSupabase();
+                            // Mark for autosave in normal mode
+                            this.hasChanges = true;
                         }
                     }
                     
@@ -1311,8 +1404,8 @@
                     this.loadLogo(card.logo);
                 }
                 
-                // Save to Supabase for real-time collaboration
-                this.saveToSupabase();
+                // Mark for autosave
+                this.hasChanges = true;
                 
                 return card;
             }
@@ -2407,28 +2500,27 @@
                 app.circleRadius = parseInt(e.target.value);
                 radiusValue.textContent = e.target.value;
                 app.render();
-                app.saveToSupabase(); // Save setting changes
+                app.hasChanges = true; // Mark for autosave
             });
             
             distanceSlider.addEventListener('input', (e) => {
                 app.centerDistance = parseInt(e.target.value);
                 distanceValue.textContent = e.target.value;
                 app.render();
-                app.saveToSupabase(); // Save setting changes
+                app.hasChanges = true; // Mark for autosave
             });
             
             cardSizeSlider.addEventListener('input', (e) => {
                 app.cardSize = parseInt(e.target.value);
                 cardSizeValue.textContent = e.target.value;
                 app.render();
-                app.saveToSupabase(); // Save setting changes
+                app.hasChanges = true; // Mark for autosave
             });
             
             showCirclesCheckbox.addEventListener('change', (e) => {
                 app.showCircles = e.target.checked;
                 app.render();
-                app.saveToSupabase(); // Save setting changes
-                // No notification needed for simple toggle
+                app.hasChanges = true; // Mark for autosave
             });
             
             console.log('✅ Business Card Canvas ready with real-time collaboration');
