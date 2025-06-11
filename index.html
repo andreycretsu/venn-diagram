@@ -721,25 +721,20 @@
                     
                     supabaseClient = supabase.createClient(supabaseConfig.url, supabaseConfig.key);
                     
-                    // Test connection with more detailed error info
+                    // Test connection with simple cards table
                     const { data: testData, error: testError } = await supabaseClient
-                        .from('canvas_data')
-                        .select('id, cards, connections, settings')
+                        .from('cards')
+                        .select('id, company, x, y')
                         .limit(1);
                     
                     if (testError) {
                         console.log('🔍 Supabase test error:', testError);
                         
-                        if (testError.code === 'PGRST116') {
+                        if (testError.code === 'PGRST116' || testError.code === '42P01') {
                             // Table doesn't exist
-                            console.log('📋 Table canvas_data does not exist');
+                            console.log('📋 Table "cards" does not exist');
                             await this.createSupabaseTable();
                             return false; // Let user create table manually
-                        } else if (testError.code === '42P01') {
-                            // Relation does not exist
-                            console.log('📋 Database relation does not exist');
-                            await this.createSupabaseTable();
-                            return false;
                         } else {
                             // Other error
                             console.error('❌ Supabase error:', testError.message);
@@ -748,7 +743,7 @@
                     }
                     
                     console.log('✅ Supabase connection successful!', { 
-                        dataFound: testData?.length || 0 
+                        cardsFound: testData?.length || 0 
                     });
                     
                     this.supabase = supabaseClient;
@@ -771,33 +766,58 @@
                 console.log('');
                 console.log('📋 Please run this SQL in your Supabase SQL Editor:');
                 console.log('');
-                console.log(`-- Create the main table
-CREATE TABLE IF NOT EXISTS canvas_data (
-    id text PRIMARY KEY DEFAULT 'shared-canvas',
-    cards jsonb DEFAULT '[]'::jsonb,
-    connections jsonb DEFAULT '[]'::jsonb,
-    settings jsonb DEFAULT '{}'::jsonb,
+                console.log(`-- Create simple cards table (like Figma/Miro)
+CREATE TABLE IF NOT EXISTS cards (
+    id text PRIMARY KEY,
+    company text NOT NULL,
+    logo text,
+    x real NOT NULL,
+    y real NOT NULL,
+    card_type text DEFAULT 'normal', -- 'normal', 'A', 'B'
+    paired_card_id text,
+    created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );
 
--- Enable real-time updates
-ALTER PUBLICATION supabase_realtime ADD TABLE canvas_data;
+-- Create connections table
+CREATE TABLE IF NOT EXISTS connections (
+    id text PRIMARY KEY,
+    from_card_id text REFERENCES cards(id) ON DELETE CASCADE,
+    to_card_id text REFERENCES cards(id) ON DELETE CASCADE,
+    created_at timestamp with time zone DEFAULT now()
+);
 
--- Insert initial row
-INSERT INTO canvas_data (id) VALUES ('shared-canvas')
+-- Create settings table  
+CREATE TABLE IF NOT EXISTS canvas_settings (
+    id text PRIMARY KEY DEFAULT 'default',
+    circle_radius integer DEFAULT 300,
+    center_distance integer DEFAULT 200,
+    card_size integer DEFAULT 64,
+    show_circles boolean DEFAULT true,
+    show_point_a boolean DEFAULT false,
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+-- Enable real-time updates for all tables
+ALTER PUBLICATION supabase_realtime ADD TABLE cards;
+ALTER PUBLICATION supabase_realtime ADD TABLE connections;
+ALTER PUBLICATION supabase_realtime ADD TABLE canvas_settings;
+
+-- Insert default settings
+INSERT INTO canvas_settings (id) VALUES ('default')
 ON CONFLICT (id) DO NOTHING;
 
--- Optional: Enable Row Level Security
-ALTER TABLE canvas_data ENABLE ROW LEVEL SECURITY;
+-- Enable Row Level Security
+ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE canvas_settings ENABLE ROW LEVEL SECURITY;
 
--- Optional: Allow anonymous access (for demo purposes)
-CREATE POLICY "Allow anonymous access" ON canvas_data
-    FOR ALL
-    TO anon
-    USING (true)
-    WITH CHECK (true);`);
+-- Allow anonymous access (for demo)
+CREATE POLICY "Allow anonymous access" ON cards FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anonymous access" ON connections FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anonymous access" ON canvas_settings FOR ALL TO anon USING (true) WITH CHECK (true);`);
                 console.log('');
-                console.log('⚡ After running the SQL, refresh this page to enable sync!');
+                console.log('⚡ After running the SQL, refresh this page to enable real-time sync!');
                 console.log('');
             }
 
@@ -807,25 +827,25 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                     clearInterval(this.autosaveInterval);
                 }
                 
-                // Autosave every 3 seconds if there are changes
+                // Autosave every 2 seconds if there are changes (like Figma)
                 this.autosaveInterval = setInterval(() => {
                     if (this.hasChanges && !this.isDragging) {
-                        this.saveToSupabase();
+                        this.saveAllToSupabase();
                         this.hasChanges = false;
                     }
-                }, 3000);
+                }, 2000);
                 
                 // Also save on window blur/unload
                 window.addEventListener('blur', () => {
                     if (this.hasChanges) {
-                        this.saveToSupabase();
+                        this.saveAllToSupabase();
                         this.hasChanges = false;
                     }
                 });
                 
                 window.addEventListener('beforeunload', () => {
                     if (this.hasChanges) {
-                        this.saveToSupabase();
+                        this.saveAllToSupabase();
                     }
                 });
             }
@@ -852,50 +872,84 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                 if (!this.supabase) return;
 
                 try {
-                    console.log('📥 Loading data from Supabase...');
+                    console.log('📥 Loading cards from Supabase...');
                     
-                    const { data, error } = await this.supabase
-                        .from('canvas_data')
+                    // Load all cards
+                    const { data: cardsData, error: cardsError } = await this.supabase
+                        .from('cards')
                         .select('*')
-                        .eq('id', 'shared-canvas')
+                        .order('created_at', { ascending: true });
+
+                    if (cardsError) {
+                        console.error('❌ Error loading cards:', cardsError);
+                        throw cardsError;
+                    }
+
+                    // Load all connections
+                    const { data: connectionsData, error: connectionsError } = await this.supabase
+                        .from('connections')
+                        .select('*');
+
+                    if (connectionsError) {
+                        console.error('❌ Error loading connections:', connectionsError);
+                        // Don't throw, connections are optional
+                    }
+
+                    // Load settings
+                    const { data: settingsData, error: settingsError } = await this.supabase
+                        .from('canvas_settings')
+                        .select('*')
+                        .eq('id', 'default')
                         .single();
 
-                    if (error) {
-                        if (error.code === 'PGRST116') {
-                            // No data found, create initial record
-                            console.log('📝 No data found, creating initial record...');
-                            await this.createInitialRecord();
-                            return;
-                        }
-                        throw error;
+                    if (settingsError) {
+                        console.log('⚠️ No settings found, using defaults');
                     }
 
-                    if (data && data.cards) {
-                        console.log('📥 Loading saved canvas from cloud...');
-                        this.cards = data.cards || [];
-                        this.connections = data.connections || [];
-                        
-                        if (data.settings) {
-                            this.circleRadius = data.settings.circleRadius || 300;
-                            this.centerDistance = data.settings.centerDistance || 200;
-                            this.cardSize = data.settings.cardSize || 64;
-                            this.showCircles = data.settings.showCircles !== false;
-                            this.showPointA = data.settings.showPointA || false;
-                            this.updateControlsUI();
+                    // Convert database format to app format
+                    this.cards = cardsData.map(card => ({
+                        id: card.id,
+                        company: card.company,
+                        logo: card.logo,
+                        x: card.x,
+                        y: card.y,
+                        isVersion: card.card_type === 'normal' ? undefined : card.card_type,
+                        pairedCardId: card.paired_card_id
+                    }));
+
+                    this.connections = connectionsData?.map(conn => ({
+                        id: conn.id,
+                        fromId: conn.from_card_id,
+                        toId: conn.to_card_id
+                    })) || [];
+
+                    if (settingsData) {
+                        this.circleRadius = settingsData.circle_radius || 300;
+                        this.centerDistance = settingsData.center_distance || 200;
+                        this.cardSize = settingsData.card_size || 64;
+                        this.showCircles = settingsData.show_circles !== false;
+                        this.showPointA = settingsData.show_point_a || false;
+                        this.updateControlsUI();
+                    }
+
+                    console.log('✅ Loaded:', {
+                        cards: this.cards.length,
+                        connections: this.connections.length
+                    });
+
+                    // Pre-load all logos
+                    this.cards.forEach(card => {
+                        if (card.logo) {
+                            this.loadLogo(card.logo);
                         }
-                        
-                        // Pre-load all logos
-                        this.cards.forEach(card => {
-                            if (card.logo) {
-                                this.loadLogo(card.logo);
-                            }
-                        });
-                        
-                        this.render();
-                    } else {
-                        // No saved data, start with clean canvas
+                    });
+
+                    this.render();
+
+                    if (this.cards.length === 0) {
                         this.initializeCleanCanvas();
                     }
+
                 } catch (error) {
                     console.error('❌ Error loading from Supabase:', error.message);
                     this.initializeCleanCanvas();
@@ -940,68 +994,183 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
             setupRealTimeSubscription() {
                 if (!this.supabase) return;
 
-                console.log('🔔 Setting up real-time subscription...');
+                console.log('🔔 Setting up real-time subscriptions (like Figma)...');
                 
-                // Subscribe to real-time changes
-                this.subscription = this.supabase
-                    .channel('canvas-realtime')
+                // Subscribe to cards changes
+                this.cardsSubscription = this.supabase
+                    .channel('cards-realtime')
                     .on('postgres_changes', 
                         { 
-                            event: 'UPDATE', 
+                            event: '*', 
                             schema: 'public', 
-                            table: 'canvas_data',
-                            filter: 'id=eq.shared-canvas'
+                            table: 'cards'
                         },
                         (payload) => {
                             if (!this.isUpdating) {
-                                console.log('📡 Received real-time update from another device!');
-                                this.handleRealtimeUpdate(payload.new);
+                                this.handleCardRealtimeUpdate(payload);
                             }
                         }
                     )
                     .subscribe((status) => {
-                        console.log('📡 Real-time subscription status:', status);
+                        console.log('📡 Cards subscription status:', status);
+                    });
+
+                // Subscribe to connections changes
+                this.connectionsSubscription = this.supabase
+                    .channel('connections-realtime')
+                    .on('postgres_changes', 
+                        { 
+                            event: '*', 
+                            schema: 'public', 
+                            table: 'connections'
+                        },
+                        (payload) => {
+                            if (!this.isUpdating) {
+                                this.handleConnectionRealtimeUpdate(payload);
+                            }
+                        }
+                    )
+                    .subscribe((status) => {
+                        console.log('📡 Connections subscription status:', status);
+                    });
+
+                // Subscribe to settings changes
+                this.settingsSubscription = this.supabase
+                    .channel('settings-realtime')
+                    .on('postgres_changes', 
+                        { 
+                            event: '*', 
+                            schema: 'public', 
+                            table: 'canvas_settings'
+                        },
+                        (payload) => {
+                            if (!this.isUpdating) {
+                                this.handleSettingsRealtimeUpdate(payload);
+                            }
+                        }
+                    )
+                    .subscribe((status) => {
+                        console.log('📡 Settings subscription status:', status);
                         if (status === 'SUBSCRIBED') {
-                            console.log('✅ Real-time collaboration is ACTIVE!');
+                            console.log('✅ Real-time collaboration is ACTIVE! (like Figma)');
                         }
                     });
             }
 
-            handleRealtimeUpdate(data) {
-                console.log('📡 INSTANT UPDATE received from another device!', {
-                    cards: data.cards?.length || 0,
-                    connections: data.connections?.length || 0,
-                    isDragging: this.isDragging
-                });
+            handleCardRealtimeUpdate(payload) {
+                console.log('📡 Card update from another device!', payload.eventType, payload.new?.company);
                 
                 // Don't update if we're currently dragging
-                if (this.isDragging) {
-                    return;
-                }
+                if (this.isDragging) return;
                 
-                // Update immediately for instant sync
-                this.cards = data.cards || [];
-                this.connections = data.connections || [];
-                if (data.settings) {
-                    this.circleRadius = data.settings.circleRadius || 300;
-                    this.centerDistance = data.settings.centerDistance || 200;
-                    this.cardSize = data.settings.cardSize || 64;
-                    this.showCircles = data.settings.showCircles !== false;
-                    this.showPointA = data.settings.showPointA || false;
-                    this.updateControlsUI();
-                }
+                const { eventType, new: newRecord, old: oldRecord } = payload;
                 
-                // Pre-load any new logos
-                this.cards.forEach(card => {
-                    if (card.logo && !this.loadedLogos.has(card.logo)) {
-                        this.loadLogo(card.logo);
+                if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                    // Convert database format to app format
+                    const updatedCard = {
+                        id: newRecord.id,
+                        company: newRecord.company,
+                        logo: newRecord.logo,
+                        x: newRecord.x,
+                        y: newRecord.y,
+                        isVersion: newRecord.card_type === 'normal' ? undefined : newRecord.card_type,
+                        pairedCardId: newRecord.paired_card_id
+                    };
+                    
+                    // Update or add card
+                    const existingIndex = this.cards.findIndex(c => c.id === updatedCard.id);
+                    if (existingIndex >= 0) {
+                        this.cards[existingIndex] = updatedCard;
+                    } else {
+                        this.cards.push(updatedCard);
                     }
-                });
+                    
+                    // Pre-load logo if needed
+                    if (updatedCard.logo && !this.loadedLogos.has(updatedCard.logo)) {
+                        this.loadLogo(updatedCard.logo);
+                    }
+                    
+                } else if (eventType === 'DELETE' && oldRecord) {
+                    // Remove card
+                    this.cards = this.cards.filter(c => c.id !== oldRecord.id);
+                }
                 
                 this.render();
             }
+            
+            handleConnectionRealtimeUpdate(payload) {
+                console.log('📡 Connection update from another device!', payload.eventType);
+                
+                if (this.isDragging) return;
+                
+                const { eventType, new: newRecord, old: oldRecord } = payload;
+                
+                if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                    const updatedConnection = {
+                        id: newRecord.id,
+                        fromId: newRecord.from_card_id,
+                        toId: newRecord.to_card_id
+                    };
+                    
+                    const existingIndex = this.connections.findIndex(c => c.id === updatedConnection.id);
+                    if (existingIndex >= 0) {
+                        this.connections[existingIndex] = updatedConnection;
+                    } else {
+                        this.connections.push(updatedConnection);
+                    }
+                    
+                } else if (eventType === 'DELETE' && oldRecord) {
+                    this.connections = this.connections.filter(c => c.id !== oldRecord.id);
+                }
+                
+                this.render();
+            }
+            
+            handleSettingsRealtimeUpdate(payload) {
+                console.log('📡 Settings update from another device!', payload.eventType);
+                
+                if (this.isDragging) return;
+                
+                const { eventType, new: newRecord } = payload;
+                
+                if (eventType === 'UPDATE' && newRecord) {
+                    this.circleRadius = newRecord.circle_radius || 300;
+                    this.centerDistance = newRecord.center_distance || 200;
+                    this.cardSize = newRecord.card_size || 64;
+                    this.showCircles = newRecord.show_circles !== false;
+                    this.showPointA = newRecord.show_point_a || false;
+                    this.updateControlsUI();
+                    this.render();
+                }
+            }
 
-            async saveToSupabase() {
+            async saveCardToSupabase(card) {
+                if (!this.supabase || !this.isConnected) return;
+
+                try {
+                    const cardData = {
+                        id: card.id,
+                        company: card.company,
+                        logo: card.logo || null,
+                        x: card.x,
+                        y: card.y,
+                        card_type: card.isVersion || 'normal',
+                        paired_card_id: card.pairedCardId || null,
+                        updated_at: new Date().toISOString()
+                    };
+
+                    const { error } = await this.supabase
+                        .from('cards')
+                        .upsert(cardData, { onConflict: 'id' });
+
+                    if (error) throw error;
+
+                } catch (error) {
+                    console.error('❌ Failed to save card:', error);
+                }
+            }
+
+            async saveAllToSupabase() {
                 if (!this.supabase || !this.isConnected) {
                     console.log('💾 No Supabase connection - saving locally only');
                     this.updateStatus('disconnected', 'Local storage only');
@@ -1012,50 +1181,57 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                 this.isUpdating = true; // Prevent infinite loops
                 
                 try {
-                    const saveData = {
-                        id: 'shared-canvas',
-                        cards: this.cards,
-                        connections: this.connections,
-                        settings: {
-                            circleRadius: this.circleRadius,
-                            centerDistance: this.centerDistance,
-                            cardSize: this.cardSize,
-                            showCircles: this.showCircles,
-                            showPointA: this.showPointA
-                        },
+                    console.log('💾 Syncing all data to cloud...');
+
+                    // Save all cards
+                    const cardPromises = this.cards.map(card => {
+                        const cardData = {
+                            id: card.id,
+                            company: card.company,
+                            logo: card.logo || null,
+                            x: card.x,
+                            y: card.y,
+                            card_type: card.isVersion || 'normal',
+                            paired_card_id: card.pairedCardId || null,
+                            updated_at: new Date().toISOString()
+                        };
+                        return this.supabase.from('cards').upsert(cardData, { onConflict: 'id' });
+                    });
+
+                    await Promise.all(cardPromises);
+
+                    // Save connections
+                    if (this.connections.length > 0) {
+                        const connectionData = this.connections.map(conn => ({
+                            id: conn.id,
+                            from_card_id: conn.fromId,
+                            to_card_id: conn.toId
+                        }));
+
+                        await this.supabase.from('connections').upsert(connectionData, { onConflict: 'id' });
+                    }
+
+                    // Save settings
+                    const settingsData = {
+                        id: 'default',
+                        circle_radius: this.circleRadius,
+                        center_distance: this.centerDistance,
+                        card_size: this.cardSize,
+                        show_circles: this.showCircles,
+                        show_point_a: this.showPointA,
                         updated_at: new Date().toISOString()
                     };
 
-                    console.log('💾 Autosaving to cloud...', { 
-                        cards: this.cards.length,
-                        connections: this.connections.length 
-                    });
-
-                    const { error } = await this.supabase
-                        .from('canvas_data')
-                        .upsert(saveData, { onConflict: 'id' });
-
-                    if (error) {
-                        console.error('❌ Supabase save error:', {
-                            message: error.message,
-                            code: error.code,
-                            details: error.details,
-                            hint: error.hint
-                        });
-                        throw error;
-                    }
+                    await this.supabase.from('canvas_settings').upsert(settingsData, { onConflict: 'id' });
 
                     // Update status briefly to show save
-                    this.updateStatus('connected', 'Saved to cloud ✓');
+                    this.updateStatus('connected', 'Synced ✓');
                     setTimeout(() => {
-                        this.updateStatus('connected', 'Cloud autosave active');
-                    }, 2000);
+                        this.updateStatus('connected', 'Real-time sync active');
+                    }, 1500);
 
                 } catch (error) {
-                    console.error('❌ Save to Supabase failed:', {
-                        message: error.message,
-                        code: error.code
-                    });
+                    console.error('❌ Sync failed:', error);
                     
                     // Specific error handling
                     if (error.code === '42P01') {
@@ -1068,17 +1244,6 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                     
                     // Always save locally as backup
                     this.saveToStorage();
-                    
-                    // Try to reconnect after a delay
-                    setTimeout(() => {
-                        console.log('🔄 Attempting to reconnect...');
-                        this.connectToSupabase().then(connected => {
-                            if (connected) {
-                                this.updateStatus('connected', 'Reconnected! ✓');
-                                this.isConnected = true;
-                            }
-                        });
-                    }, 5000);
                     
                 } finally {
                     this.isUpdating = false;
@@ -1414,7 +1579,9 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                     company: data.company,
                     logo: data.logo || '',
                     x: data.x,
-                    y: data.y
+                    y: data.y,
+                    isVersion: data.isVersion,
+                    pairedCardId: data.pairedCardId
                 };
                 this.cards.push(card);
                 
@@ -1423,7 +1590,12 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                     this.loadLogo(card.logo);
                 }
                 
-                // Mark for autosave
+                // Save individual card immediately (like Figma)
+                if (this.supabase && this.isConnected) {
+                    this.saveCardToSupabase(card);
+                }
+                
+                // Mark for autosave (backup)
                 this.hasChanges = true;
                 
                 return card;
@@ -2134,22 +2306,20 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                     
                     // Test 3: Try a test write
                     console.log('💾 Test 3: Testing write permissions...');
-                    const testData = {
-                        id: 'shared-canvas',
-                        cards: this.cards,
-                        connections: this.connections,
-                        settings: {
-                            circleRadius: this.circleRadius,
-                            centerDistance: this.centerDistance,
-                            cardSize: this.cardSize,
-                            showCircles: this.showCircles
-                        },
+                    const testCardData = {
+                        id: 'test-card-' + Date.now(),
+                        company: 'Test Company',
+                        logo: null,
+                        x: 100,
+                        y: 100,
+                        card_type: 'normal',
+                        paired_card_id: null,
                         updated_at: new Date().toISOString()
                     };
                     
                     const { error: writeError } = await testClient
-                        .from('canvas_data')
-                        .upsert(testData, { onConflict: 'id' });
+                        .from('cards')
+                        .insert(testCardData);
                     
                     if (writeError) {
                         console.error('❌ Write test failed:', writeError);
@@ -2158,23 +2328,27 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                     
                     console.log('✅ Write test OK');
                     
+                    // Clean up test card
+                    await testClient.from('cards').delete().eq('id', testCardData.id);
+                    console.log('🧹 Test card cleaned up');
+
                     // Test 4: Try real-time subscription
                     console.log('📡 Test 4: Testing real-time...');
                     const testChannel = testClient
                         .channel('test-channel')
                         .on('postgres_changes',
-                            { event: '*', schema: 'public', table: 'canvas_data' },
+                            { event: '*', schema: 'public', table: 'cards' },
                             (payload) => console.log('📡 Real-time test received:', payload)
                         )
                         .subscribe((status) => {
                             console.log('📡 Real-time subscription status:', status);
                         });
                     
-                    // Clean up test channel after 5 seconds
+                    // Clean up test channel after 3 seconds
                     setTimeout(() => {
                         testChannel.unsubscribe();
                         console.log('🧹 Test channel cleaned up');
-                    }, 5000);
+                    }, 3000);
                     
                     // All tests passed!
                     this.supabase = testClient;
