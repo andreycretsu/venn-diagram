@@ -487,8 +487,8 @@
                 </div>
                 
                 <div class="control-group">
-                    <label class="control-label">Circle Radius: <span id="radiusValue">200</span>px</label>
-                    <input type="range" id="radiusSlider" min="50" max="500" value="200" class="control-slider">
+                    <label class="control-label">Circle Radius: <span id="radiusValue">300</span>px</label>
+                    <input type="range" id="radiusSlider" min="50" max="500" value="300" class="control-slider">
                 </div>
                 
                 <div class="control-group">
@@ -647,7 +647,7 @@
                 this.hasChanges = false;
                 this.autosaveInterval = null;
                 
-                this.circleRadius = 200;
+                this.circleRadius = 300;
                 this.centerDistance = 200;
                 this.cardSize = 64;
                 
@@ -876,7 +876,7 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                         this.connections = data.connections || [];
                         
                         if (data.settings) {
-                            this.circleRadius = data.settings.circleRadius || 200;
+                            this.circleRadius = data.settings.circleRadius || 300;
                             this.centerDistance = data.settings.centerDistance || 200;
                             this.cardSize = data.settings.cardSize || 64;
                             this.showCircles = data.settings.showCircles !== false;
@@ -911,7 +911,7 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                         cards: [],
                         connections: [],
                         settings: {
-                            circleRadius: 200,
+                            circleRadius: 300,
                             centerDistance: 200,
                             cardSize: 64,
                             showCircles: true,
@@ -983,7 +983,7 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                 this.cards = data.cards || [];
                 this.connections = data.connections || [];
                 if (data.settings) {
-                    this.circleRadius = data.settings.circleRadius || 200;
+                    this.circleRadius = data.settings.circleRadius || 300;
                     this.centerDistance = data.settings.centerDistance || 200;
                     this.cardSize = data.settings.cardSize || 64;
                     this.showCircles = data.settings.showCircles !== false;
@@ -1094,7 +1094,7 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                         this.cards = data.cards || [];
                         this.connections = data.connections || [];
                         if (data.settings) {
-                            this.circleRadius = data.settings.circleRadius || 200;
+                            this.circleRadius = data.settings.circleRadius || 300;
                             this.centerDistance = data.settings.centerDistance || 200;
                             this.cardSize = data.settings.cardSize || 64;
                             this.showCircles = data.settings.showCircles !== false;
@@ -1560,11 +1560,20 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                 const x = card.x - this.cardSize / 2;
                 const y = card.y - this.cardSize / 2;
 
+                // Special handling for Point A cards - only show if global toggle is on OR if hovered
+                if (card.isVersion === 'A') {
+                    if (!this.showPointA && !isHovered) {
+                        return; // Don't draw Point A cards unless globally enabled or hovered
+                    }
+                }
+
                 this.ctx.save();
                 
-                // Apply transparency for A cards or if specified
-                if (card.isVersion === 'A' || card.opacity) {
-                    this.ctx.globalAlpha = card.opacity || 0.5;
+                // Apply transparency for A cards
+                if (card.isVersion === 'A') {
+                    this.ctx.globalAlpha = 0.5;
+                } else if (card.opacity) {
+                    this.ctx.globalAlpha = card.opacity;
                 }
 
                 // Enhanced shadow effects
@@ -1739,11 +1748,17 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
             }
 
             drawConnection(startCard, endCard) {
-                // Connect centers of cards
-                const startX = startCard.x;
-                const startY = startCard.y;
-                const endX = endCard.x;
-                const endY = endCard.y;
+                // Calculate edge-to-edge connection points instead of center-to-center
+                const centerAngle = Math.atan2(endCard.y - startCard.y, endCard.x - startCard.x);
+                const cardRadius = this.cardSize / 2;
+                
+                // Start point: edge of start card towards end card
+                const startX = startCard.x + Math.cos(centerAngle) * cardRadius;
+                const startY = startCard.y + Math.sin(centerAngle) * cardRadius;
+                
+                // End point: edge of end card towards start card
+                const endX = endCard.x - Math.cos(centerAngle) * cardRadius;
+                const endY = endCard.y - Math.sin(centerAngle) * cardRadius;
                 
                 this.ctx.save();
                 this.ctx.strokeStyle = '#3b82f6';
@@ -1778,10 +1793,10 @@ CREATE POLICY "Allow anonymous access" ON canvas_data
                 
                 this.ctx.stroke();
                 
-                // Draw arrow at end
+                // Draw arrow at end - now visible since line ends at card edge
                 this.ctx.setLineDash([]);
                 const arrowAngle = Math.atan2(endY - controlY2, endX - controlX2);
-                const arrowLength = 10;
+                const arrowLength = 12;
                 
                 this.ctx.beginPath();
                 this.ctx.moveTo(endX, endY);
